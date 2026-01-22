@@ -1,0 +1,72 @@
+[
+  {
+    "category": "functional",
+    "description": "A yarn script entry is created to run this script",
+    "steps": [
+      "An entry under 'scripts' in the root package.json file gets created to run the generated script"
+    ],
+    "passes": true
+  },
+  {
+    "category": "functional",
+    "description": "Create update-dynamic-plugins.ts file",
+    "steps": ["Create an update-dynamic-plugins.ts file under /utils"],
+    "passes": true
+  },
+  {
+    "category": "functional",
+    "description": "Find dynamic-plugins.yaml file",
+    "steps": [
+      "The script can find the dynamic-plugins.yaml file in this directory"
+    ],
+    "passes": true
+  },
+  {
+    "category": "functional",
+    "description": "Find the latest release version in this repository",
+    "steps": [
+      "The script can find the value of the latest release in the root package.json file in 'version'"
+    ],
+    "passes": true
+  },
+  {
+    "category": "functional",
+    "description": "Update release version in dynamic-plugins.yaml",
+    "steps": [
+      "The script can update any literal 'release-x.y' values in the dynamic-plugins.yaml file",
+      "The script uses the latest release version to update these values to the correct release version",
+      "The changes are persisted to the dynamic-plugins file"
+    ],
+    "passes": true
+  },
+  {
+    "category": "functional",
+    "description": "The registry values can be optionally updated",
+    "steps": [
+      "The script can update any literal '<registry>' values in the dynamic-plugins.yaml file",
+      "The script uses an optional flag and value to do the update",
+      "The changes are persisted to the dynamic-plugins file"
+    ],
+    "passes": true
+  },
+  {
+    "category": "functional",
+    "description": "The username values can be optionally updated",
+    "steps": [
+      "The script can update any literal '<username>' values in the dynamic-plugins.yaml file",
+      "The script uses an optional flag and value to do the update",
+      "The changes are persisted to the dynamic-plugins file"
+    ],
+    "passes": true
+  },
+  {
+    "category": "functional",
+    "description": "The repository values can be optionally updated",
+    "steps": [
+      "The script can update any literal '<repository>' values in the dynamic-plugins.yaml file",
+      "The script uses an optional flag and value to do the update",
+      "The changes are persisted to the dynamic-plugins file"
+    ],
+    "passes": true
+  }
+]

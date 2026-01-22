@@ -1,0 +1,37 @@
+Feature 1 - Yarn script entry: COMPLETE
+- Added "update-dynamic-plugins": "tsx utils/update-dynamic-plugins.ts" to package.json scripts
+- Verified script runs successfully via `yarn update-dynamic-plugins`
+- Type check passes with utils/tsconfig.json
+
+Feature 5 - Update release version in dynamic-plugins.yaml: FIXED
+- Bug: Regex /release-\d+\.\d+/g only matched numeric versions, not literal 'release-x.y'
+- Fix: Updated regex to /release-(?:x\.y|\d+\.\d+)/g to match both literal x.y and numeric versions
+- Verified: Script now updates all 6 release-x.y occurrences to release-1.8
+- Type check passes
+
+Feature 6 - Optional repository update: COMPLETE
+- Added --repository <value> optional flag using node:util parseArgs
+- Script replaces all <repository> placeholders in dynamic-plugins.yaml with the provided value
+- Verified: `yarn update-dynamic-plugins --repository "quay.io"` updates all 6 occurrences
+- Type check passes
+- Changes persisted to dynamic-plugins.yaml
+
+Feature 7 - Optional username update: COMPLETE
+- Added USERNAME_PLACEHOLDER_REGEX = /<username>/g constant
+- Added --username <value> optional flag using node:util parseArgs (short: -u)
+- Added updateUsernamePlaceholder() function to replace all <username> placeholders
+- Verified: `npx tsx utils/update-dynamic-plugins.ts --username "testuser"` updates all 6 occurrences
+- Type check passes
+- Changes persisted to dynamic-plugins.yaml
+
+Features completed:
+- Feature 1: Yarn script entry added
+- Feature 2: update-dynamic-plugins.ts exists in /utils
+- Feature 3: Script finds dynamic-plugins.yaml at development/configuration/rhdh/dynamic-plugins.yaml
+- Feature 4: Script reads version from package.json (currently 1.8)
+- Feature 5: Script updates release-x.y patterns in dynamic-plugins.yaml (FIXED - regex now matches literal x.y)
+- Feature 6: Optional --registry flag updates <registry> placeholders
+- Feature 7: Optional --username flag updates <username> placeholders
+
+Remaining:
+- Feature 8: Optional --repository flag updates <repository> placeholders
