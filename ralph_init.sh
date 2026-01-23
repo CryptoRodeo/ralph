@@ -3,6 +3,9 @@
 # Download ralph.sh from GitHub
 curl -o ralph.sh https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ralph.sh
 
+# Make ralph.sh executable
+chmod +x ralph.sh
+
 # Create empty progress.txt file
 touch progress.txt
 
@@ -19,3 +22,6 @@ cat >prd.json <<'EOF'
   },
 ]
 EOF
+
+# Delete this script after setup is complete
+rm -- "$0"
