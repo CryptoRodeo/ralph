@@ -15,6 +15,12 @@ if ! [[ "$iterations" =~ ^[0-9]+$ ]] || [[ "$iterations" -le 0 ]]; then
   exit 1
 fi
 
+# Optional: ensure we're in a repo with the expected files
+if [[ ! -f prd.json || ! -f progress.txt ]]; then
+  echo "Error: expected ./prd.json and ./progress.txt in the current directory." >&2
+  exit 1
+fi
+
 PROMPT=$(
   cat <<'EOF'
 @prd.json @progress.txt
@@ -55,6 +61,28 @@ After step 4 (and step 5 if applicable):
 EOF
 )
 
+cleanup() {
+  echo "" >&2
+  echo "Exiting Ralph loop." >&2
+}
+trap cleanup EXIT
+trap 'echo ""; echo "Interrupted."; exit 130' INT
+
+confirm_continue() {
+  local reply=""
+  while true; do
+    echo "" >&2
+    echo "Iteration complete." >&2
+    echo "Review prd.json/progress.txt and git diff." >&2
+    read -r -p "Run next iteration? [y/N] " reply
+    case "${reply}" in
+    [yY] | [yY][eE][sS]) return 0 ;;
+    "" | [nN] | [nN][oO]) return 1 ;;
+    *) echo "Please answer y or n." >&2 ;;
+    esac
+  done
+}
+
 for ((i = 1; i <= iterations; i++)); do
   echo "=== Ralph iteration $i/$iterations ===" >&2
 
@@ -64,7 +92,10 @@ for ((i = 1; i <= iterations; i++)); do
     exit 1
   fi
 
-  # Human-in-the-loop: stop after one iteration by design.
-  echo "Iteration $i complete. Review prd.json/progress.txt, then re-run if desired." >&2
-  exit 0
+  # If we still have iterations left, ask the human whether to continue.
+  if ((i < iterations)); then
+    if ! confirm_continue; then
+      exit 0
+    fi
+  fi
 done
