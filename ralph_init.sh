@@ -2,15 +2,14 @@
 set -euo pipefail
 
 # If we are NOT running from a file, write ourselves to a temp file and re-run
-if [[ "${BASH_SOURCE[0]}" == "bash" || ! -f "${BASH_SOURCE[0]}" ]]; then
+if [[ "${BASH_SOURCE[0]-}" == "bash" || ! -f "${BASH_SOURCE[0]-}" ]]; then
   TMP="$(mktemp /tmp/ralph_init.XXXXXX.sh)"
   cat >"$TMP"
   chmod +x "$TMP"
+  # Only clean up the temp script we created
+  trap 'rm -f "$TMP"' EXIT
   exec bash "$TMP"
 fi
-
-SCRIPT_PATH="$(realpath "$0")"
-trap 'rm -f "$SCRIPT_PATH"' EXIT
 
 echo "🚀 Initializing Ralph..."
 
@@ -36,4 +35,3 @@ cat >"prd.json" <<'EOF'
 EOF
 
 echo "✅ Ralph initialized"
-echo "🧨 Cleaning up installer: $SCRIPT_PATH"
