@@ -23,5 +23,7 @@ cat >prd.json <<'EOF'
 ]
 EOF
 
-# Delete this script after setup is complete
-rm -- "$0"
+# Delete this script after setup is complete (only if run as a file, not piped)
+if [ -f "$0" ]; then
+  rm -- "$0"
+fi
