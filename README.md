@@ -14,143 +14,66 @@ curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ra
 
 This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and set up everything you need to start using Ralph loops.
 
-## Reverse Ralph (Work in progress)
+## Reverse Ralph (Ticket-First Planning)
 
-**Reverse Ralph** is the inverse of a traditional Ralph loop.
+**Reverse Ralph** is a complementary workflow to a traditional Ralph loop.
 
-Instead of starting with a spec (`prd.json`) and iteratively implementing features, Reverse Ralph starts with **existing artifacts** (code, commits, diffs, screenshots, designs, logs, or tickets) and incrementally **reconstructs understanding, intent, and structure**.
+While a standard Ralph loop starts with a **PRD or task list** and iterates forward into implementation, Reverse Ralph starts with a **Jira ticket or GitHub issue** and works *backward* to derive a structured, implementation-ready plan.
 
-Think of it as using an LLM to *reverse-engineer* clarity.
+### Why Reverse Ralph?
 
----
+In many real projects:
+- Requirements live in tickets or repo issues
+- Context is scattered across docs, configs, screenshots, and code
+- The hardest part is *understanding what needs to be built*, not building it
 
-### What problem does Reverse Ralph solve?
+Reverse Ralph exists to turn vague or overloaded tickets into something an engineer can confidently execute.
 
-Reverse Ralph is useful when:
+### How It Works
 
-- You inherit an unfamiliar codebase
-- A feature already exists but has no clear spec
-- A PR or diff is large and hard to reason about
-- Requirements evolved informally (Slack, Jira comments, tribal knowledge)
-- You want to document *what was actually built*, not what was planned
+Reverse Ralph runs as a small, file-based state machine:
 
-Traditional Ralph answers:
-> “What should I build next?”
+1. **Ticket Analysis**
+   - Reconstructs intent, scope, requirements, risks, and open questions
+   - Produces a clear `ticket_analysis.md`
+   - Explicitly calls out unknowns instead of guessing
 
-Reverse Ralph answers:
-> “What **is** this, why does it exist, and how does it work?”
+2. **Plan Derivation**
+   - Converts the analysis into an ordered, incremental plan
+   - Outputs a machine and human-readable `derived_plan.json`
+   - Each step is small, testable, and suitable for a forward execution loop
 
----
+The output of Reverse Ralph **is designed to feed directly into a normal Ralph loop**.
 
-### Core idea
+### When to Use Reverse Ralph
 
-Reverse Ralph flips the direction of reasoning:
+Use Reverse Ralph when:
+- You’re handed a Jira ticket or Github Issue that could use some refinement
+- You’re onboarding to an unfamiliar repo
+- You want to de-risk work before touching production code
+- You want explicit assumptions and acceptance criteria *before* coding
 
-| Traditional Ralph | Reverse Ralph |
-|-------------------|--------------|
-| Spec → Steps → Code | Code → Meaning → Spec |
-| Forward planning | Backward reconstruction |
-| Goal-driven | Evidence-driven |
-| “What to do next?” | “What already exists?” |
+Use a standard Ralph loop when:
+- You already have a clear PRD or task list
+- You’re iterating on a known design or feature
 
-The loop still follows the same principles:
-- One step at a time
-- State lives in files, not model memory
-- Human-in-the-loop
-- Deterministic and restartable
+### Relationship to Ralph Loops
 
-Only the **inputs and outputs are reversed**.
+Think of the two together like this:
 
----
+```
 
-### Typical Reverse Ralph loop
+Ticket / Issue
+↓
+Reverse Ralph
+↓
+PRD / Plan
+↓
+Ralph Loop
+↓
+Implementation
 
-A Reverse Ralph loop might look like:
+```
 
-1. Provide inputs:
-   - A code directory
-   - A PR diff
-   - Screenshots or mockups
-   - Logs or runtime output
-   - Partial tickets or comments
-
-2. Ask the LLM to:
-   - Identify the **intent** of the code/change
-   - Infer **implicit requirements**
-   - Detect assumptions, invariants, and constraints
-   - Highlight unclear or risky areas
-
-3. Emit exactly **one artifact per iteration**, such as:
-   - A reconstructed user story
-   - An inferred feature spec
-   - A design explanation
-   - A list of unanswered questions
-   - A proposed ADR
-   - A migration or refactor plan
-
-4. Persist the output (e.g. `reverse_progress.txt`, `reverse_prd.json`)
-
-5. Repeat until understanding stabilizes
-
----
-
-### Example use cases
-
-- **PR review at scale**  
-  Feed a large diff and have Reverse Ralph explain *what changed* and *why* in human terms.
-
-- **Post-hoc documentation**  
-  Generate specs and design docs *after* a feature is already merged.
-
-- **Onboarding**  
-  Walk a new developer through an unfamiliar subsystem step by step.
-
-- **Incident analysis**  
-  Start from logs and behavior, reconstruct causal chains and assumptions.
-
-- **Refactor preparation**  
-  Extract the “true contract” of existing code before changing it.
-
----
-
-### Relationship to normal Ralph loops
-
-Reverse Ralph is not a replacement for Ralph loops.
-
-They are complementary:
-
-- **Reverse Ralph** is for understanding and reconstruction
-- **Ralph** is for planning and execution
-
-A common workflow is:
-
-1. Use **Reverse Ralph** to derive a clean spec from messy reality
-2. Convert that spec into `prd.json`
-3. Switch to a normal **Ralph loop** to implement improvements
-
----
-
-### Design philosophy
-
-Reverse Ralph follows the same core constraints as Ralph:
-
-- No hidden model memory
-- All state is explicit and reviewable
-- One focused output per iteration
-- Human judgment always overrides the loop
-
-The difference is purely **direction of reasoning**.
-
----
-
-### Status
-
-Reverse Ralph is experimental and evolving.
-
-Expect:
-- New patterns
-- Specialized prompts
-- Dedicated tooling (diff-aware, image-aware, log-aware loops)
-
-If Ralph is about *building deliberately*,
-Reverse Ralph is about *understanding precisely*.
+Reverse Ralph helps you **figure out what to build**.  
+Ralph loops help you **build it safely and incrementally**.

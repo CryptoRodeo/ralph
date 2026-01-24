@@ -1,146 +1,238 @@
-# Reverse Ralph →  Implementation Steps (Claude)
+# Reverse Ralph
 
-This repository includes a **Ralph-style planning loop** that turns a Jira / feature ticket into a **step-by-step implementation plan**, emitting **one concrete step at a time** using **Claude Code (`claude` CLI)**.
+**Reverse Ralph** is a *ticket-first* planning tool that derives a concrete, step-by-step implementation plan from a Jira ticket or GitHub issue **using repository context**.
 
-It is designed to be run from the **root of a software repository** and will automatically use that repository as contextual input (docs, configs, selected code, and images).
+Instead of starting from code and discovering requirements later, Reverse Ralph starts with the **problem description** and works backward into an actionable plan.
+
+It is designed to be:
+
+* Deterministic and file-based
+* Stateless with respect to the LLM
+* Safe to re-run and regenerate
+* Friendly to Git workflows
 
 ---
 
-## What this script does
+## What Reverse Ralph Produces
 
-At a high level:
+Running the script generates a small set of artifacts inside an output directory (default: `.ralph/`):
 
-1. Takes a **ticket or user story** (Jira, GitHub issue, feature description)
-2. Snapshots **high-signal repo context** (docs, design files, configs, images)
-3. Generates a **structured implementation plan** (`plan.json`)
-4. On each run, emits **exactly ONE next step** in executable detail
-5. Persists progress so repeated runs continue where you left off
+| File                 | Purpose                                                                  |
+| -------------------- | ------------------------------------------------------------------------ |
+| `ticket.md`          | Normalized ticket text (source of truth)                                 |
+| `context.bundle.md`  | Curated repo context (docs, config, images, optional code excerpts)      |
+| `ticket_analysis.md` | Structured understanding of the problem (requirements, risks, questions) |
+| `derived_plan.json`  | Ordered, implementation-ready plan (5–30 steps)                          |
+| `reverse_state.json` | Tracks the current stage (for incremental runs)                          |
 
-This makes it ideal for:
-- Breaking down large features
-- Onboarding into unfamiliar codebases
-- Driving incremental, reviewable implementation
-- AI-assisted planning without losing human control
+---
+
+## High-Level Workflow
+
+Reverse Ralph runs as a **two-stage state machine**:
+
+### Stage 0 – Ticket Analysis
+
+Produces `ticket_analysis.md`:
+
+* Problem statement
+* In-scope / out-of-scope
+* Requirements & acceptance criteria
+* Risks, assumptions, and open questions
+* Suggested repo touchpoints
+
+### Stage 1 – Plan Derivation
+
+Produces `derived_plan.json`:
+
+* Small, incremental steps (≤ 1 day each)
+* Acceptance criteria per step
+* Early “spike” steps if unknowns exist
+* Realistic references to repo structure
+
+After Stage 1, Reverse Ralph is **complete**.
 
 ---
 
 ## Requirements
 
-- Bash (macOS / Linux)
-- Claude Code CLI
-- A Claude account with CLI access
+* Bash (tested with `bash` + `set -euo pipefail`)
+* `claude` CLI (or compatible LLM command)
+* `file` utility (optional but recommended)
+* A local repository (run from repo root)
 
 ---
 
-## Quick start
+## Installation
 
-### 1. Place the script at repo root
-
-```
-./ralph_ticket_steps.sh
+```bash
+chmod +x reverse_ralph.sh
 ```
 
----
+(Optional) Put it on your PATH:
 
-### 2. Provide a ticket (choose one)
-
-From a file:
-```
-./ralph_ticket_steps.sh --ticket-file TICKET.md
-```
-
-From stdin:
-```
-echo "As a user, I want..." | ./ralph_ticket_steps.sh --ticket-stdin
-```
-
-From a string / Jira URL:
-```
-./ralph_ticket_steps.sh --ticket "ABC-123: Add SBOM grouping support"
+```bash
+mv reverse_ralph.sh ~/bin/reverse_ralph
 ```
 
 ---
 
-### 3. Get the first step
+## Basic Usage
 
-By default, the script emits **one step per run**:
+You must provide **exactly one** source of ticket input.
 
+### From a ticket file
+
+```bash
+./reverse_ralph.sh --ticket-file TICKET.md
 ```
-./ralph_ticket_steps.sh --ticket-file TICKET.md
+
+### From stdin
+
+```bash
+cat TICKET.md | ./reverse_ralph.sh --ticket-stdin
 ```
 
-Re-run it to get the **next step**.
+### From inline text
+
+```bash
+./reverse_ralph.sh --ticket "ABC-123: Add filtering to groups table"
+```
+
+By default, **one stage advances per run**.
 
 ---
 
-## Output files
+## Running All Stages in One Go
 
-All artifacts are written to `.ralph/`:
+To fully generate both `ticket_analysis.md` and `derived_plan.json` in a single invocation:
 
+```bash
+./reverse_ralph.sh --ticket-file TICKET.md --iterations 2
 ```
+
+---
+
+## Regenerating Outputs
+
+If you update the ticket or repo context and want to re-derive everything:
+
+```bash
+./reverse_ralph.sh --ticket-file TICKET.md --regen --iterations 2
+```
+
+This:
+
+* Keeps `ticket.md` and context
+* Deletes derived outputs
+* Resets state to Stage 0
+
+---
+
+## Context Collection (Important)
+
+Reverse Ralph builds a **context bundle** automatically.
+
+### Included by default
+
+* README files
+* Docs (`docs/`, `design/`, `adr/`, etc.)
+* Config files (`*.yaml`, `*.json`, `package.json`, `go.mod`, etc.)
+* Images (paths + metadata)
+* Representative code excerpts
+
+### Excluded by default
+
+* `.git/`, `node_modules/`, `dist/`, `build/`, caches, IDE files
+* Any paths listed in `.ralphignore`
+
+### Disable code excerpts (docs-only mode)
+
+```bash
+./reverse_ralph.sh --ticket-file TICKET.md --no-include-code
+```
+
+---
+
+## Ignoring Files with `.ralphignore`
+
+Create a `.ralphignore` file in your repo root to exclude paths from context scanning:
+
+```text
+# Ignore generated files
+dist/
+coverage/
+tmp/
+```
+
+Rules are simple prefix matches (similar to `.gitignore`, but intentionally minimal).
+
+---
+
+## Output Directory
+
+By default, all artifacts go into:
+
+```text
 .ralph/
-├── ticket.md
-├── context.bundle.md
-├── plan.json
-├── state.json
-└── progress.md
+```
+
+You can override this:
+
+```bash
+./reverse_ralph.sh --ticket-file TICKET.md --out-dir .reverse-ralph
 ```
 
 ---
 
-## Context handling
+## LLM Configuration
 
-Included by default:
-- README files
-- docs/, design/, adr/
-- Config files (JSON, YAML, etc.)
-- Images (design mocks, diagrams)
-- Limited code excerpts
+Reverse Ralph is **stateless by design**.
 
-Excluded by default:
-- .git/
-- node_modules/
-- dist/, build/, target/
-- Generated artifacts and caches
+By default it runs:
 
----
-
-## Optional: .ralphignore
-
-Create a `.ralphignore` file at repo root to exclude paths:
-
-```
-node_modules
-dist
-build
-coverage
-vendor
+```bash
+claude --permission-mode plan --max-turns 3 --no-session-persistence
 ```
 
-Each line is treated as a path prefix.
+You can override this behavior via environment variables:
 
----
-
-## Claude CLI configuration (recommended)
-
-```
+```bash
 export LLM_CMD=claude
-export LLM_ARGS="--permission-mode plan --max-turns 3 --no-session-persistence"
+export LLM_ARGS="--permission-mode plan --max-turns 5 --no-session-persistence"
 ```
 
----
-
-## Typical workflow
-
-1. Paste ticket into `TICKET.md`
-2. Run script → get Step 1
-3. Implement step
-4. Commit
-5. Re-run script → next step
+No hidden memory is used. All state lives on disk.
 
 ---
 
-This tool is intentionally **planning-only**.
-It does not edit files or execute code.
+## Typical Workflow
 
-Happy shipping.
+1. Paste or export a Jira ticket
+2. Run Reverse Ralph
+3. Review `ticket_analysis.md`
+4. Review and edit `derived_plan.json`
+5. Feed plan steps into:
+
+   * A forward “Ralph loop”
+   * A task runner
+   * A human-driven implementation process
+
+---
+
+## Design Philosophy
+
+* **Tickets are contracts**, not suggestions
+* **Assumptions must be explicit**
+* **Unknowns should surface early**
+* **Plans should be incremental and testable**
+* **LLMs should not hold hidden state**
+
+Reverse Ralph exists to turn vague tickets into something an engineer can *actually execute*.
+
+---
+
+## License / Usage
+
+This script is intended for internal tooling, experimentation, and developer workflows.
+Adapt it freely to fit your planning or execution loops.

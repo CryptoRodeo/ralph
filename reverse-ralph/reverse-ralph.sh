@@ -1,40 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ralph_ticket_steps.sh
+# reverse_ralph.sh
 #
-# Hardened Ralph-style loop for Claude Code (claude CLI).
-# - Run from repo root (default context-dir = .)
-# - Ingest a Jira/feature ticket (file / stdin / string)
-# - Snapshot high-signal context (docs/design/config + selected code)
-# - Include image paths for Claude to review (no base64 spam by default)
-# - Generate plan.json once, then emit EXACTLY ONE next step per iteration
+# Reverse Ralph (ticket-first) for deriving an implementation plan from:
+# - Jira ticket / GitHub issue text
+# - repo context (docs/configs/images; optional code excerpts)
+#
+# Design goals:
+# - Runs from repo root (default --context-dir .)
+# - Stateless Claude calls (claude -p + --no-session-persistence recommended)
+# - File-based state (no hidden model memory)
+# - Two-stage state machine:
+#     Stage 0: produce ticket_analysis.md
+#     Stage 1: produce derived_plan.json
+#     Stage 2: done
 #
 # Usage:
-#   ./ralph_ticket_steps.sh --ticket-file TICKET.md
-#   echo "Story..." | ./ralph_ticket_steps.sh --ticket-stdin
-#   ./ralph_ticket_steps.sh --ticket "https://jira/browse/ABC-123"
+#   ./reverse_ralph.sh --ticket-file TICKET.md
+#   echo "..." | ./reverse_ralph.sh --ticket-stdin
+#   ./reverse_ralph.sh --ticket "ABC-123: ..."
 #
 # Options:
 #   --context-dir <dir>    (default: .)
-#   --iterations <n>       (default: 1)
+#   --iterations <n>       (default: 1) advance stages per run
 #   --out-dir <dir>        (default: .ralph)
-#   --include-code         Include code files in context snapshot (default: auto; see INCLUDE_CODE_DEFAULT)
-#   --no-include-code      Exclude code files (docs-only) in context snapshot
+#   --include-code         Include code excerpts in context bundle
+#   --no-include-code      Docs/config/images only
+#   --regen                Regenerate outputs for current+future stages (keeps ticket/context)
 #
-# Claude CLI:
+# Claude:
 #   LLM_CMD=claude
-#   LLM_ARGS='--permission-mode plan --max-turns 3 --no-session-persistence'
-#
-# Notes:
-# - This script does NOT edit your repo; it only generates steps.
-# - Use .ralphignore (optional) for custom excludes (one path prefix or glob-like prefix per line).
-# - Excludes common junk dirs by default (node_modules, .git, dist, etc).
-# - Keeps context sizes bounded (caps number of files and excerpt sizes).
+#   LLM_ARGS="--permission-mode plan --max-turns 3 --no-session-persistence"
 
-# ----------------------------
-# Configuration (defaults)
-# ----------------------------
 LLM_CMD="${LLM_CMD:-claude}"
 LLM_ARGS="${LLM_ARGS:---permission-mode plan --max-turns 3 --no-session-persistence}"
 
@@ -46,18 +44,18 @@ TICKET_FILE=""
 TICKET_TEXT=""
 TICKET_STDIN=0
 
-# Context collection knobs
-MAX_TEXT_BYTES="${MAX_TEXT_BYTES:-120000}" # max bytes per text file excerpted
-MAX_CODE_BYTES="${MAX_CODE_BYTES:-80000}"  # max bytes per code file excerpted
-MAX_FILES_DOCS="${MAX_FILES_DOCS:-45}"     # cap doc/config files
-MAX_FILES_CODE="${MAX_FILES_CODE:-25}"     # cap code files
-MAX_FILES_IMAGES="${MAX_FILES_IMAGES:-25}" # cap images
+REGEN=0
 
-# Default behavior: include some code only if docs/context are thin.
+# Context limits
+MAX_TEXT_BYTES="${MAX_TEXT_BYTES:-120000}"
+MAX_CODE_BYTES="${MAX_CODE_BYTES:-80000}"
+MAX_FILES_DOCS="${MAX_FILES_DOCS:-45}"
+MAX_FILES_CODE="${MAX_FILES_CODE:-25}"
+MAX_FILES_IMAGES="${MAX_FILES_IMAGES:-25}"
+
 INCLUDE_CODE_DEFAULT=1
 INCLUDE_CODE="$INCLUDE_CODE_DEFAULT"
 
-# Default excludes when running at repo root
 EXCLUDE_DIRS=(
   ".git"
   "node_modules"
@@ -78,7 +76,6 @@ EXCLUDE_DIRS=(
   "__pycache__"
 )
 
-# High-signal docs/config globs
 DOC_GLOBS=(
   "README*"
   "docs/**/*.md" "docs/**/*.mdx" "docs/**/*.adoc" "docs/**/*.rst" "docs/**/*.txt"
@@ -91,46 +88,39 @@ DOC_GLOBS=(
   "*.yaml" "*.yml" "*.json" "*.toml" "*.ini" "*.env" ".env*"
 )
 
-# Code globs (only included if INCLUDE_CODE=1)
 CODE_GLOBS=(
   "src/**/*" "packages/**/*" "plugins/**/*"
   "*.ts" "*.tsx" "*.js" "*.jsx" "*.go" "*.py" "*.java" "*.kt" "*.rs" "*.c" "*.h" "*.cpp" "*.hpp" "*.sh"
 )
 
-# Images (design mocks, screenshots)
 IMAGE_GLOBS=("*.png" "*.jpg" "*.jpeg" "*.webp" "*.gif" "*.svg")
-
-# Ralph ignore file
 RALPHIGNORE_NAME=".ralphignore"
 
-# ----------------------------
-# Helpers
-# ----------------------------
 usage() {
   cat <<'EOF'
 Usage:
-  ralph_ticket_steps.sh [options]
+  reverse_ralph.sh [options]
 
 Ticket input (choose one):
   --ticket-file <path>   Read ticket/user story from a file
-  --ticket <string>      Ticket text or Jira URL (treated as text; no network fetch)
+  --ticket <string>      Ticket text or URL (treated as text; no network fetch)
   --ticket-stdin         Read ticket text from stdin
 
 Options:
   --context-dir <dir>    Directory to scan for context files (default: .)
-  --iterations <n>       How many steps to emit this run (default: 1)
+  --iterations <n>       How many stage-advances to run (default: 1)
   --out-dir <dir>        Output state directory (default: .ralph)
-  --include-code         Force include code excerpts in context snapshot
-  --no-include-code      Force docs-only context snapshot
-  -h, --help             Show help
+  --include-code         Force include code excerpts in context bundle
+  --no-include-code      Force docs-only context bundle
+  --regen                Regenerate outputs for current+future stages
 
-Env:
-  LLM_CMD=claude
-  LLM_ARGS='--permission-mode plan --max-turns 3 --no-session-persistence'
+Outputs (in out-dir):
+  ticket.md
+  context.bundle.md
+  ticket_analysis.md
+  derived_plan.json
+  reverse_state.json
 
-Notes:
-  - Creates: .ralph/ticket.md, context.bundle.md, plan.json, state.json, progress.md
-  - Uses .ralphignore (optional) in context dir to exclude paths by prefix (one per line)
 EOF
 }
 
@@ -138,12 +128,10 @@ die() {
   echo "Error: $*" >&2
   exit 1
 }
-
 trim() { awk '{$1=$1;print}'; }
 
-# Prefix-based exclude check (fast and predictable)
 is_excluded_path() {
-  local rel="$1" # relative path from CONTEXT_DIR
+  local rel="$1"
   local ex
 
   for ex in "${EXCLUDE_DIRS[@]}"; do
@@ -190,23 +178,18 @@ is_image_like() {
 }
 
 collect_matches() {
-  # Collect unique, sorted matches for a set of globs, respecting excludes, up to cap.
-  # Output: NUL-delimited absolute paths.
   local cap="$1"
   shift
   local -a globs=("$@")
-
-  local -a results=()
-  local rel abs
 
   (
     shopt -s nullglob globstar
     cd "$CONTEXT_DIR"
 
-    # We deliberately iterate globs in order to prioritize signal.
+    local -a results=()
+    local rel abs
     for g in "${globs[@]}"; do
       for rel in $g; do
-        # Normalize rel; skip dirs
         [[ -d "$rel" ]] && continue
         is_excluded_path "$rel" && continue
         abs="$CONTEXT_DIR/$rel"
@@ -215,9 +198,6 @@ collect_matches() {
       done
     done
 
-    # Print unique (preserve order as much as possible)
-    # Use awk with RS to handle NUL safely would be overkill; we expect manageable sizes.
-    # We'll do a simple uniqueness pass here:
     declare -A seen=()
     for abs in "${results[@]}"; do
       if [[ -z "${seen[$abs]+x}" ]]; then
@@ -235,7 +215,6 @@ safe_excerpt() {
   local max="$2"
   local size
   size="$(file_bytes "$f")"
-
   if [[ "$size" -le "$max" ]]; then
     cat "$f"
   else
@@ -246,55 +225,45 @@ safe_excerpt() {
   fi
 }
 
-normalize_ticket() {
-  local ticket_md="$OUT_DIR/ticket.md"
-
-  if [[ -n "$TICKET_FILE" ]]; then
-    [[ -f "$TICKET_FILE" ]] || die "Ticket file not found: $TICKET_FILE"
-    cat "$TICKET_FILE" >"$ticket_md"
-    return
-  fi
-
-  if [[ "$TICKET_STDIN" -eq 1 ]]; then
-    cat >"$ticket_md"
-    return
-  fi
-
-  if [[ -n "$TICKET_TEXT" ]]; then
-    printf "%s\n" "$TICKET_TEXT" >"$ticket_md"
-    return
-  fi
-
-  die "Provide one of: --ticket-file, --ticket, --ticket-stdin"
-}
-
 llm() {
-  # Claude Code CLI: use print mode for scripting. Read prompt via stdin.
   local prompt="$1"
   # shellcheck disable=SC2086
   printf "%s" "$prompt" | "$LLM_CMD" -p $LLM_ARGS
 }
 
-# ----------------------------
-# State files
-# ----------------------------
+# Paths
 TICKET_MD="$OUT_DIR/ticket.md"
 CONTEXT_BUNDLE="$OUT_DIR/context.bundle.md"
-PLAN_JSON="$OUT_DIR/plan.json"
-STATE_JSON="$OUT_DIR/state.json"
-PROGRESS_MD="$OUT_DIR/progress.md"
+TICKET_ANALYSIS_MD="$OUT_DIR/ticket_analysis.md"
+DERIVED_PLAN_JSON="$OUT_DIR/derived_plan.json"
+STATE_JSON="$OUT_DIR/reverse_state.json"
+
+normalize_ticket() {
+  if [[ -n "$TICKET_FILE" ]]; then
+    [[ -f "$TICKET_FILE" ]] || die "Ticket file not found: $TICKET_FILE"
+    cat "$TICKET_FILE" >"$TICKET_MD"
+    return
+  fi
+  if [[ "$TICKET_STDIN" -eq 1 ]]; then
+    cat >"$TICKET_MD"
+    return
+  fi
+  if [[ -n "$TICKET_TEXT" ]]; then
+    printf "%s\n" "$TICKET_TEXT" >"$TICKET_MD"
+    return
+  fi
+  die "Provide one of: --ticket-file, --ticket, --ticket-stdin"
+}
 
 write_context_bundle() {
   : >"$CONTEXT_BUNDLE"
 
   {
-    echo "# Context Bundle"
+    echo "# Context Bundle (Reverse Ralph)"
     echo
     echo "Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     echo "Repo/context dir: $CONTEXT_DIR"
-    if [[ -f "$CONTEXT_DIR/$RALPHIGNORE_NAME" ]]; then
-      echo "Using ignore file: $CONTEXT_DIR/$RALPHIGNORE_NAME"
-    fi
+    [[ -f "$CONTEXT_DIR/$RALPHIGNORE_NAME" ]] && echo "Using ignore file: $CONTEXT_DIR/$RALPHIGNORE_NAME"
     echo
     echo "## Ticket"
     echo
@@ -304,7 +273,6 @@ write_context_bundle() {
     echo
   } >>"$CONTEXT_BUNDLE"
 
-  # Docs/config (high-signal)
   local -a doc_files=()
   while IFS= read -r -d '' f; do
     is_text_like "$f" && doc_files+=("$f")
@@ -333,7 +301,6 @@ write_context_bundle() {
     } >>"$CONTEXT_BUNDLE"
   done
 
-  # Images (paths + metadata for Claude to open)
   local -a images=()
   while IFS= read -r -d '' f; do
     is_image_like "$f" && images+=("$f")
@@ -355,9 +322,7 @@ write_context_bundle() {
   for f in "${images[@]}"; do
     size="$(file_bytes "$f")"
     mime="unknown"
-    if command -v file >/dev/null 2>&1; then
-      mime="$(file --mime-type -b "$f" || true)"
-    fi
+    command -v file >/dev/null 2>&1 && mime="$(file --mime-type -b "$f" || true)"
     {
       echo "### $f"
       echo "- mime: $mime"
@@ -367,11 +332,9 @@ write_context_bundle() {
     } >>"$CONTEXT_BUNDLE"
   done
 
-  # Code excerpts (optional / gated)
   if [[ "$INCLUDE_CODE" -eq 1 ]]; then
     local -a code_files=()
     while IFS= read -r -d '' f; do
-      # Only include text-like code files
       is_text_like "$f" && code_files+=("$f")
     done < <(collect_matches "$MAX_FILES_CODE" "${CODE_GLOBS[@]}")
 
@@ -382,9 +345,10 @@ write_context_bundle() {
         echo "_No code files matched (or all excluded)._"
         echo
       else
-        echo "These are representative excerpts to orient implementation. Prefer inspecting repo directly for full context."
+        echo "Representative excerpts only. Prefer inspecting repo directly for complete context."
         echo
       fi
+      echo
     } >>"$CONTEXT_BUNDLE"
 
     for f in "${code_files[@]}"; do
@@ -409,40 +373,122 @@ write_context_bundle() {
   fi
 }
 
-ensure_plan() {
-  if [[ -f "$PLAN_JSON" ]]; then
+state_get_stage() {
+  if [[ ! -f "$STATE_JSON" ]]; then
+    echo "0"
     return
   fi
+  local v
+  v="$(tr -d '\n\r\t ' <"$STATE_JSON" | sed -n 's/^{"stage":\([0-9][0-9]*\)}$/\1/p')"
+  [[ -n "$v" ]] || die "reverse_state.json is invalid"
+  echo "$v"
+}
+
+state_set_stage() {
+  local s="$1"
+  cat >"$STATE_JSON" <<EOF
+{"stage":$s}
+EOF
+}
+
+regen_if_requested() {
+  if [[ "$REGEN" -eq 1 ]]; then
+    rm -f "$TICKET_ANALYSIS_MD" "$DERIVED_PLAN_JSON"
+    # Keep state but rewind to stage 0 so it re-derives everything deterministically
+    state_set_stage 0
+  fi
+}
+
+stage0_ticket_analysis() {
+  if [[ -f "$TICKET_ANALYSIS_MD" ]]; then
+    return
+  fi
+
+  echo "Generating ticket_analysis.md ..."
 
   local prompt
   prompt="$(
     cat <<'EOF'
-You are operating in a STRICT "Ralph Planning Loop".
+You are operating in a STRICT "Reverse Ralph" ticket analysis phase.
 
 You are at the ROOT of a software repository.
-Assume relative paths are from repository root.
-Prefer referencing existing files/folders over inventing new structure.
+Your job is to turn a Jira ticket / GitHub issue into a clear, implementation-oriented understanding.
+
+You will be given:
+- ticket.md (the raw ticket text)
+- context.bundle.md (repo context excerpts + image paths you can open)
+
+Rules:
+- Output MUST be markdown only.
+- Do NOT write an implementation plan yet. Focus on reconstructing intent and requirements.
+- Be explicit about unknowns; do not assume details not supported by the inputs.
+- If the ticket references UI/behavior and images exist, open them and incorporate findings.
+
+Create a document with these sections:
+
+# Ticket Analysis
+## Problem statement (1-3 paragraphs)
+## In-scope (bullets)
+## Out-of-scope (bullets)
+## Requirements (bullets, testable)
+## Acceptance criteria (bullets, testable)
+## Assumptions (bullets)
+## Constraints (bullets: security, performance, compatibility, UX, API)
+## Risks (bullets)
+## Open questions (bullets, prioritized)
+## Suggested repo touchpoints (bullets: folders/files/components to inspect)
+
+Keep it concise and actionable.
+EOF
+  )"
+
+  local combined="@${TICKET_MD} @${CONTEXT_BUNDLE}
+
+${prompt}
+"
+
+  local out
+  out="$(llm "$combined")" || die "LLM failed generating ticket analysis"
+  printf "%s\n" "$out" >"$TICKET_ANALYSIS_MD"
+}
+
+stage1_derive_plan() {
+  if [[ -f "$DERIVED_PLAN_JSON" ]]; then
+    return
+  fi
+
+  echo "Generating derived_plan.json ..."
+
+  local prompt
+  prompt="$(
+    cat <<'EOF'
+You are operating in a STRICT "Reverse Ralph" planning phase.
 
 Goal:
-Turn the ticket + context into an ordered implementation plan.
+Derive a concrete implementation plan from the ticket and the ticket analysis.
+This plan should be suitable to feed into an execution loop (one step at a time).
+
+You will be given:
+- ticket.md
+- ticket_analysis.md
+- context.bundle.md (repo excerpts + image paths)
 
 Rules:
 - Output MUST be valid JSON ONLY. No prose, no markdown fences.
-- Create a plan of 5 to 30 steps.
-- Each step MUST be concrete, testable, and small enough to do in < 1 day.
-- Steps should be ordered for incremental progress and early validation.
-- Include clear acceptance criteria per step.
-- If information is missing, include steps that explicitly clarify what to ask / where to check.
-
-You are given a context bundle that may contain:
-- Excerpts from docs/config files
-- Image paths with lines like 'Analyze this image: <path>' (you should open and interpret them)
+- Steps must be ordered for incremental progress and early validation.
+- Create 5 to 30 steps.
+- Each step should be small enough to implement in < 1 day.
+- Include acceptance criteria for each step.
+- If unknowns remain, include early steps that resolve them (spikes, confirmations, API checks).
+- Reference repo locations realistically; do not invent structure if existing structure is implied.
 
 Schema:
 {
   "title": string,
+  "source": "jira" | "github" | "ticket",
   "summary": string,
   "assumptions": string[],
+  "open_questions": string[],
   "risks": string[],
   "steps": [
     {
@@ -450,155 +496,50 @@ Schema:
       "title": string,
       "details": string,
       "acceptance_criteria": string[],
-      "touched_areas": string[]   // files/folders/components likely involved (best guess)
+      "touched_areas": string[]
     }
   ]
 }
-
-Now produce the plan JSON.
 EOF
   )"
 
-  local combined
-  combined="@${TICKET_MD} @${CONTEXT_BUNDLE}
+  local combined="@${TICKET_MD} @${TICKET_ANALYSIS_MD} @${CONTEXT_BUNDLE}
 
 ${prompt}
 "
 
-  echo "Generating plan.json ..."
-  # Force JSON output at the CLI level too (best-effort). If unsupported, Claude will still follow the prompt.
+  # Prefer JSON output mode if supported (harmless if ignored by CLI).
   # shellcheck disable=SC2086
   local out
   out="$(printf "%s" "$combined" | "$LLM_CMD" -p $LLM_ARGS --output-format json)" ||
-    die "LLM failed generating plan"
-  printf "%s\n" "$out" >"$PLAN_JSON"
-
-  cat >"$STATE_JSON" <<EOF
-{"next_index":0}
-EOF
-  : >"$PROGRESS_MD"
+    die "LLM failed deriving plan"
+  printf "%s\n" "$out" >"$DERIVED_PLAN_JSON"
 }
 
-json_get_next_index() {
-  local v
-  v="$(tr -d '\n\r\t ' <"$STATE_JSON" | sed -n 's/^{"next_index":\([0-9][0-9]*\)}$/\1/p')"
-  [[ -n "$v" ]] || die "state.json is invalid"
-  printf "%s" "$v"
-}
+advance_once() {
+  local stage
+  stage="$(state_get_stage)"
 
-json_set_next_index() {
-  local n="$1"
-  cat >"$STATE_JSON" <<EOF
-{"next_index":$n}
-EOF
-}
-
-count_steps() {
-  # Count '"id": "' occurrences; assumes schema is followed.
-  grep -o '"id"[[:space:]]*:[[:space:]]*"' "$PLAN_JSON" | wc -l | tr -d ' '
-}
-
-extract_step_json_by_index() {
-  # Extract the Nth step object (0-based) from plan.json using a lightweight awk state machine.
-  local idx="$1"
-  awk -v target="$idx" '
-    BEGIN { inSteps=0; depth=0; cur=-1; buf=""; }
-    /"steps"[[:space:]]*:[[:space:]]*\[/ { inSteps=1 }
-    {
-      if (!inSteps) next;
-
-      if ($0 ~ /{[[:space:]]*$/) {
-        if (depth==0) { cur++; buf=""; }
-        depth++;
-      }
-
-      if (depth>0) { buf = buf $0 "\n"; }
-
-      if ($0 ~ /}[[:space:]]*,?[[:space:]]*$/ && depth>0) {
-        depth--;
-        if (depth==0 && cur==target) {
-          print buf;
-          exit 0;
-        }
-      }
-    }
-  ' "$PLAN_JSON"
-}
-
-emit_next_step() {
-  local next total
-  next="$(json_get_next_index)"
-  total="$(count_steps)"
-
-  if [[ "$next" -ge "$total" ]]; then
-    echo "All steps already emitted. (next_index=$next total=$total)"
-    return 0
-  fi
-
-  local step_json
-  step_json="$(extract_step_json_by_index "$next")"
-  [[ -n "$step_json" ]] || die "Failed to extract step index $next"
-
-  local prompt
-  prompt="$(
-    cat <<'EOF'
-You are operating in a STRICT Ralph Step Emitter.
-
-You will be given:
-- plan.json (the full plan)
-- progress.md (steps already emitted)
-- one specific step object (JSON fragment)
-
-Task:
-- Produce EXACTLY ONE "Next Step" output in MARKDOWN.
-- Expand ONLY the given step into an executable checklist.
-- Include sections:
-  - Objective
-  - Rationale
-  - Checklist (bulleted; keep items small)
-  - Files/areas to inspect or likely modify
-  - Done when (acceptance criteria, in your words)
-  - Questions to answer (ONLY if the step requires missing info)
-
-Constraints:
-- DO NOT include any other steps.
-- DO NOT revise the overall plan.
-- Keep it focused: one step only.
-
-Output must be markdown only.
-EOF
-  )"
-
-  local combined
-  combined="@${PLAN_JSON} @${PROGRESS_MD}
-
-# Step JSON (the ONLY step to expand)
-${step_json}
-
-${prompt}
-"
-
-  echo "Emitting step $((next + 1))/$total ..."
-  local out
-  out="$(llm "$combined")" || die "LLM failed emitting step"
-
-  {
-    echo "----"
-    echo "## Step $((next + 1))"
-    echo
-    printf "%s\n" "$out"
-    echo
-  } >>"$PROGRESS_MD"
-
-  json_set_next_index "$((next + 1))"
-
-  echo
-  echo "Wrote: $PROGRESS_MD"
-  echo "Updated: $STATE_JSON"
+  case "$stage" in
+  0)
+    stage0_ticket_analysis
+    state_set_stage 1
+    ;;
+  1)
+    stage1_derive_plan
+    state_set_stage 2
+    ;;
+  *)
+    echo "Reverse Ralph is complete (stage=$stage)."
+    echo "Outputs:"
+    echo "  - $TICKET_ANALYSIS_MD"
+    echo "  - $DERIVED_PLAN_JSON"
+    ;;
+  esac
 }
 
 # ----------------------------
-# CLI args
+# Parse args
 # ----------------------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -634,6 +575,10 @@ while [[ $# -gt 0 ]]; do
     INCLUDE_CODE=0
     shift
     ;;
+  --regen)
+    REGEN=1
+    shift
+    ;;
   -h | --help)
     usage
     exit 0
@@ -644,22 +589,17 @@ done
 
 [[ -d "$CONTEXT_DIR" ]] || die "--context-dir does not exist: $CONTEXT_DIR"
 [[ "$ITERATIONS" =~ ^[0-9]+$ ]] || die "--iterations must be an integer"
-mkdir -p "$OUT_DIR"
 
-# Auto-gate code inclusion: if docs are sparse, keep INCLUDE_CODE=1; else still allow it but bounded.
-# (We keep it simple: if you explicitly set --no-include-code, it stays off.)
-if [[ "$INCLUDE_CODE" -eq 1 && "$INCLUDE_CODE_DEFAULT" -eq 1 ]]; then
-  : # already on
-fi
+mkdir -p "$OUT_DIR"
 
 main() {
   normalize_ticket
   write_context_bundle
-  ensure_plan
+  regen_if_requested
 
   local i=0
   while [[ "$i" -lt "$ITERATIONS" ]]; do
-    emit_next_step
+    advance_once
     i=$((i + 1))
   done
 
@@ -667,9 +607,9 @@ main() {
   echo "Artifacts:"
   echo "  - $TICKET_MD"
   echo "  - $CONTEXT_BUNDLE"
-  echo "  - $PLAN_JSON"
+  [[ -f "$TICKET_ANALYSIS_MD" ]] && echo "  - $TICKET_ANALYSIS_MD"
+  [[ -f "$DERIVED_PLAN_JSON" ]] && echo "  - $DERIVED_PLAN_JSON"
   echo "  - $STATE_JSON"
-  echo "  - $PROGRESS_MD"
 }
 
 main
