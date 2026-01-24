@@ -14,7 +14,7 @@ curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ra
 
 This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and set up everything you need to start using Ralph loops.
 
-## Reverse Ralph (Ticket-First Planning)
+## Reverse Ralph (Ticket-First Planning - Work In Progress)
 
 **Reverse Ralph** is a complementary workflow to a traditional Ralph loop.
 
