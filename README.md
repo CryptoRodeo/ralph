@@ -1,6 +1,6 @@
 # Ralph (Work in progress)
 
-![Ralph Wiggums Meme](./ralph.jpeg){width=450px}
+<img src="./ralph.jpeg" width="450">
 
 Files, utilities and best practices related to [Ralph loops](https://ghuntley.com/ralph/)
 
