@@ -1,4 +1,4 @@
-# Reverse Ralph
+# Reverse Ralph (:construction: WIP :construction:)
 
 **Reverse Ralph** is a *ticket-first* planning tool that derives a concrete, step-by-step implementation plan from a Jira ticket or GitHub issue **using repository context**.
 
