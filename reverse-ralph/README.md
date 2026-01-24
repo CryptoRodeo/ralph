@@ -6,157 +6,157 @@ Instead of starting from code and discovering requirements later, Reverse Ralph 
 
 It is designed to be:
 
-* Deterministic and file-based
-* Stateless with respect to the LLM
-* Safe to re-run and regenerate
-* Friendly to Git workflows
+- Deterministic and file-based
+- Stateless with respect to the LLM (no hidden memory)
+- Safe to re-run (skips work when outputs already exist)
+- Friendly to Git workflows
 
 ---
 
 ## What Reverse Ralph Produces
 
-Running the script generates a small set of artifacts inside an output directory (default: `.ralph/`):
+Running the script generates artifacts inside an output directory (default: `.ralph/`):
 
-| File                 | Purpose                                                                  |
-| -------------------- | ------------------------------------------------------------------------ |
-| `ticket.md`          | Normalized ticket text (source of truth)                                 |
-| `context.bundle.md`  | Curated repo context (docs, config, images, optional code excerpts)      |
-| `ticket_analysis.md` | Structured understanding of the problem (requirements, risks, questions) |
-| `derived_plan.json`  | Ordered, implementation-ready plan (5–30 steps)                          |
-| `reverse_state.json` | Tracks the current stage (for incremental runs)                          |
+| File                | Purpose                                                                 |
+| ------------------- | ----------------------------------------------------------------------- |
+| `ticket.md`         | Normalized ticket text (source of truth)                                |
+| `context.bundle.md` | Curated repo context (docs/config, images, optional code excerpts)      |
+| `ticket_analysis.md`| Structured understanding of the problem (requirements, risks, questions)|
+| `derived_plan.json` | Ordered, implementation-ready plan (5–30 steps)                         |
+
+> Note: There is **no** `reverse_state.json` in the current script. “State” is simply the presence/absence of these files.
 
 ---
 
 ## High-Level Workflow
 
-Reverse Ralph runs as a **two-stage state machine**:
+Reverse Ralph runs in two stages:
 
 ### Stage 0 – Ticket Analysis
 
-Produces `ticket_analysis.md`:
+Produces `ticket_analysis.md` with:
 
-* Problem statement
-* In-scope / out-of-scope
-* Requirements & acceptance criteria
-* Risks, assumptions, and open questions
-* Suggested repo touchpoints
+- Problem statement
+- In-scope / out-of-scope
+- Requirements & acceptance criteria
+- Constraints, assumptions, risks
+- Open questions (prioritized)
+- Suggested repo touchpoints
 
-### Stage 1 – Plan Derivation
+### Stage 1 – Plan Derivation (JSON)
 
 Produces `derived_plan.json`:
 
-* Small, incremental steps (≤ 1 day each)
-* Acceptance criteria per step
-* Early “spike” steps if unknowns exist
-* Realistic references to repo structure
-
-After Stage 1, Reverse Ralph is **complete**.
+- 5–30 incremental steps (each sized for \< 1 day)
+- Acceptance criteria per step
+- Early “spike/confirm” steps when unknowns remain
+- Realistic repo touchpoints (based on provided context)
 
 ---
 
 ## Requirements
 
-* Bash (tested with `bash` + `set -euo pipefail`)
-* `claude` CLI (or compatible LLM command)
-* `file` utility (optional but recommended)
-* A local repository (run from repo root)
+- Bash (the script uses `#!/usr/bin/env bash` + `set -euo pipefail`)
+- An LLM CLI command (default: `claude`)
+- `jq` (**required for Stage 1**; used to extract/validate schema output)
+- `file` (optional; improves text/image detection)
 
 ---
 
 ## Installation
 
 ```bash
-chmod +x reverse_ralph.sh
-```
+chmod +x reverse-ralph.sh
+````
 
 (Optional) Put it on your PATH:
 
 ```bash
-mv reverse_ralph.sh ~/bin/reverse_ralph
+mv reverse-ralph.sh ~/bin/reverse_ralph
 ```
 
 ---
 
 ## Basic Usage
 
-You must provide **exactly one** source of ticket input.
+You must provide **exactly one** ticket input mode.
 
 ### From a ticket file
 
 ```bash
-./reverse_ralph.sh --ticket-file TICKET.md
+./reverse-ralph.sh --ticket-file TICKET.md
 ```
 
 ### From stdin
 
 ```bash
-cat TICKET.md | ./reverse_ralph.sh --ticket-stdin
+cat TICKET.md | ./reverse-ralph.sh --ticket-stdin
 ```
 
 ### From inline text
 
 ```bash
-./reverse_ralph.sh --ticket "ABC-123: Add filtering to groups table"
+./reverse-ralph.sh --ticket "ABC-123: Add filtering to groups table"
 ```
-
-By default, **one stage advances per run**.
 
 ---
 
-## Running All Stages in One Go
+## Re-running Behavior
 
-To fully generate both `ticket_analysis.md` and `derived_plan.json` in a single invocation:
+Reverse Ralph is intentionally “idempotent-ish”:
 
-```bash
-./reverse_ralph.sh --ticket-file TICKET.md --iterations 2
-```
+* It **always regenerates** `context.bundle.md` (fresh snapshot of repo context).
+* Stage outputs are **skipped if they already exist**, unless you pass `--regen`.
+
+Specifically:
+
+* If `.ralph/ticket_analysis.md` exists and you **don’t** use `--regen`, Stage 0 is skipped.
+* If `.ralph/derived_plan.json` exists and you **don’t** use `--regen`, Stage 1 is skipped.
 
 ---
 
 ## Regenerating Outputs
 
-If you update the ticket or repo context and want to re-derive everything:
+If you update the ticket or repo context and want to re-derive the analysis and plan:
 
 ```bash
-./reverse_ralph.sh --ticket-file TICKET.md --regen --iterations 2
+./reverse-ralph.sh --ticket-file TICKET.md --regen
 ```
 
-This:
+This will re-run Stage 0 and Stage 1 even if previous outputs exist.
 
-* Keeps `ticket.md` and context
-* Deletes derived outputs
-* Resets state to Stage 0
+> Note: The script does not delete previous artifacts; it simply overwrites the stage outputs it regenerates.
 
 ---
 
 ## Context Collection (Important)
 
-Reverse Ralph builds a **context bundle** automatically.
+Reverse Ralph builds a **context bundle** automatically (`context.bundle.md`), including:
 
 ### Included by default
 
 * README files
 * Docs (`docs/`, `design/`, `adr/`, etc.)
-* Config files (`*.yaml`, `*.json`, `package.json`, `go.mod`, etc.)
-* Images (paths + metadata)
-* Representative code excerpts
+* Config and metadata (`package.json`, `tsconfig*.json`, `go.mod`, `Cargo.toml`, `*.yaml`, `*.json`, etc.)
+* Images (paths + MIME/size metadata + “Analyze this image:” hints)
+* **Optional code excerpts** (enabled by default)
 
 ### Excluded by default
 
-* `.git/`, `node_modules/`, `dist/`, `build/`, caches, IDE files
-* Any paths listed in `.ralphignore`
+* `.git/`, `node_modules/`, `dist/`, `build/`, caches, IDE files, venvs, etc.
+* Anything matching prefixes in `.ralphignore`
 
 ### Disable code excerpts (docs-only mode)
 
 ```bash
-./reverse_ralph.sh --ticket-file TICKET.md --no-include-code
+./reverse-ralph.sh --ticket-file TICKET.md --no-code
 ```
 
 ---
 
 ## Ignoring Files with `.ralphignore`
 
-Create a `.ralphignore` file in your repo root to exclude paths from context scanning:
+Create a `.ralphignore` file in your repo root to exclude paths from scanning:
 
 ```text
 # Ignore generated files
@@ -165,7 +165,7 @@ coverage/
 tmp/
 ```
 
-Rules are simple prefix matches (similar to `.gitignore`, but intentionally minimal).
+Rules are simple **prefix matches** (intentionally minimal).
 
 ---
 
@@ -177,41 +177,71 @@ By default, all artifacts go into:
 .ralph/
 ```
 
-You can override this:
+Override with:
 
 ```bash
-./reverse_ralph.sh --ticket-file TICKET.md --out-dir .reverse-ralph
+./reverse-ralph.sh --ticket-file TICKET.md --out-dir .reverse-ralph
+```
+
+---
+
+## Repo Context Root
+
+By default, Reverse Ralph scans the current directory (`.`). Override with:
+
+```bash
+./reverse-ralph.sh --ticket-file TICKET.md --context-dir /path/to/repo
 ```
 
 ---
 
 ## LLM Configuration
 
-Reverse Ralph is **stateless by design**.
+Reverse Ralph is **stateless by design**. It uses no hidden conversational memory (`--no-session-persistence` by default). All durable state is the files it writes.
 
-By default it runs:
-
-```bash
-claude --permission-mode plan --max-turns 3 --no-session-persistence
-```
-
-You can override this behavior via environment variables:
+### Command
 
 ```bash
 export LLM_CMD=claude
-export LLM_ARGS="--permission-mode plan --max-turns 5 --no-session-persistence"
 ```
 
-No hidden memory is used. All state lives on disk.
+### Stage-specific args (recommended)
+
+```bash
+export LLM_ARGS_STAGE0="--permission-mode plan --max-turns 8 --no-session-persistence"
+export LLM_ARGS_STAGE1="--max-turns 12 --no-session-persistence"
+```
+
+> Stage 1 requests `--output-format json` + `--json-schema ...` internally and extracts `.structured_output` with `jq`.
+
+---
+
+## Tuning Context Size Limits (Optional)
+
+The script includes caps you can override via env vars:
+
+* `MAX_TEXT_BYTES` (default: `120000`) – per doc/config excerpt
+* `MAX_CODE_BYTES` (default: `80000`) – per code excerpt
+* `MAX_FILES_DOCS` (default: `45`)
+* `MAX_FILES_CODE` (default: `25`)
+* `MAX_FILES_IMAGES` (default: `25`)
+
+Example:
+
+```bash
+export MAX_FILES_CODE=10
+export MAX_CODE_BYTES=40000
+./reverse-ralph.sh --ticket-file TICKET.md
+```
 
 ---
 
 ## Typical Workflow
 
-1. Paste or export a Jira ticket
+1. Paste/export a Jira ticket or GitHub issue into `TICKET.md`
 2. Run Reverse Ralph
-3. Review `ticket_analysis.md`
-4. Review and edit `derived_plan.json`
+3. Review `.ralph/ticket_analysis.md` (fix missing details / clarify unknowns)
+4. Review `.ralph/derived_plan.json` (edit steps if needed)
 5. Feed plan steps into:
 
    * A forward “Ralph loop”
@@ -222,17 +252,17 @@ No hidden memory is used. All state lives on disk.
 
 ## Design Philosophy
 
-* **Tickets are contracts**, not suggestions
+* **Tickets are contracts**
 * **Assumptions must be explicit**
 * **Unknowns should surface early**
 * **Plans should be incremental and testable**
 * **LLMs should not hold hidden state**
 
-Reverse Ralph exists to turn vague tickets into something an engineer can *actually execute*.
+Reverse Ralph exists to turn vague tickets into something an engineer can actually execute.
 
 ---
 
-## License / Usage
+## Usage
 
 This script is intended for internal tooling, experimentation, and developer workflows.
 Adapt it freely to fit your planning or execution loops.

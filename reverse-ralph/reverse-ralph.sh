@@ -1,50 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# reverse_ralph.sh
+# reverse_ralph.sh (simplified + fixed)
 #
-# Reverse Ralph (ticket-first) for deriving an implementation plan from:
-# - Jira ticket / GitHub issue text
-# - repo context (docs/configs/images; optional code excerpts)
+# Default behavior:
+#   - Reads ticket
+#   - Builds a context bundle from repo files (docs/config + optional code + image paths)
+#   - Stage 0: writes ticket_analysis.md (markdown)
+#   - Stage 1: writes derived_plan.json (validated JSON plan)
 #
-# Design goals:
-# - Runs from repo root (default --context-dir .)
-# - Stateless Claude calls (claude -p + --no-session-persistence recommended)
-# - File-based state (no hidden model memory)
-# - Two-stage state machine:
-#     Stage 0: produce ticket_analysis.md
-#     Stage 1: produce derived_plan.json
-#     Stage 2: done
-#
-# Usage:
+# Examples:
 #   ./reverse_ralph.sh --ticket-file TICKET.md
 #   echo "..." | ./reverse_ralph.sh --ticket-stdin
 #   ./reverse_ralph.sh --ticket "ABC-123: ..."
 #
-# Options:
-#   --context-dir <dir>    (default: .)
-#   --iterations <n>       (default: 1) advance stages per run
-#   --out-dir <dir>        (default: .ralph)
-#   --include-code         Include code excerpts in context bundle
-#   --no-include-code      Docs/config/images only
-#   --regen                Regenerate outputs for current+future stages (keeps ticket/context)
-#
-# Claude:
-#   LLM_CMD=claude
-#   LLM_ARGS="--permission-mode plan --max-turns 3 --no-session-persistence"
+# Common knobs:
+#   --out-dir .ralph
+#   --context-dir .
+#   --no-code
+#   --regen
 
 LLM_CMD="${LLM_CMD:-claude}"
-LLM_ARGS="${LLM_ARGS:---permission-mode plan --max-turns 3 --no-session-persistence}"
+
+# Defaults (override via env)
+LLM_ARGS_STAGE0="${LLM_ARGS_STAGE0:---permission-mode plan --max-turns 8 --no-session-persistence}"
+LLM_ARGS_STAGE1="${LLM_ARGS_STAGE1:---max-turns 12 --no-session-persistence}"
 
 OUT_DIR="${OUT_DIR:-.ralph}"
 CONTEXT_DIR="."
-ITERATIONS=1
+INCLUDE_CODE=1
+REGEN=0
 
 TICKET_FILE=""
 TICKET_TEXT=""
 TICKET_STDIN=0
-
-REGEN=0
 
 # Context limits
 MAX_TEXT_BYTES="${MAX_TEXT_BYTES:-120000}"
@@ -53,32 +42,13 @@ MAX_FILES_DOCS="${MAX_FILES_DOCS:-45}"
 MAX_FILES_CODE="${MAX_FILES_CODE:-25}"
 MAX_FILES_IMAGES="${MAX_FILES_IMAGES:-25}"
 
-INCLUDE_CODE_DEFAULT=1
-INCLUDE_CODE="$INCLUDE_CODE_DEFAULT"
-
 EXCLUDE_DIRS=(
-  ".git"
-  "node_modules"
-  "vendor"
-  "dist"
-  "build"
-  "target"
-  ".next"
-  ".turbo"
-  ".cache"
-  "coverage"
-  ".idea"
-  ".vscode"
-  ".pytest_cache"
-  ".mypy_cache"
-  ".venv"
-  "venv"
-  "__pycache__"
+  ".git" "node_modules" "vendor" "dist" "build" "target" ".next" ".turbo" ".cache"
+  "coverage" ".idea" ".vscode" ".pytest_cache" ".mypy_cache" ".venv" "venv" "__pycache__"
 )
 
 DOC_GLOBS=(
-  "README*"
-  "docs/**/*.md" "docs/**/*.mdx" "docs/**/*.adoc" "docs/**/*.rst" "docs/**/*.txt"
+  "README*" "docs/**/*.md" "docs/**/*.mdx" "docs/**/*.adoc" "docs/**/*.rst" "docs/**/*.txt"
   "design/**/*.md" "design/**/*.mdx" "design/**/*.adoc" "design/**/*.rst" "design/**/*.txt"
   "adr/**/*.md" "adrs/**/*.md" "docs/adrs/**/*.md"
   "*.md" "*.mdx" "*.adoc" "*.rst" "*.txt"
@@ -102,25 +72,20 @@ Usage:
   reverse_ralph.sh [options]
 
 Ticket input (choose one):
-  --ticket-file <path>   Read ticket/user story from a file
-  --ticket <string>      Ticket text or URL (treated as text; no network fetch)
+  --ticket-file <path>   Read ticket text from a file
+  --ticket <string>      Ticket text (no network fetch)
   --ticket-stdin         Read ticket text from stdin
 
 Options:
   --context-dir <dir>    Directory to scan for context files (default: .)
-  --iterations <n>       How many stage-advances to run (default: 1)
   --out-dir <dir>        Output state directory (default: .ralph)
-  --include-code         Force include code excerpts in context bundle
-  --no-include-code      Force docs-only context bundle
-  --regen                Regenerate outputs for current+future stages
+  --no-code              Exclude code excerpts (docs/config/images only)
+  --regen                Regenerate analysis + plan (keeps ticket/context)
 
-Outputs (in out-dir):
-  ticket.md
-  context.bundle.md
-  ticket_analysis.md
-  derived_plan.json
-  reverse_state.json
-
+Env overrides:
+  LLM_CMD=claude
+  LLM_ARGS_STAGE0="--permission-mode plan --max-turns 8 --no-session-persistence"
+  LLM_ARGS_STAGE1="--max-turns 12 --no-session-persistence"
 EOF
 }
 
@@ -131,9 +96,7 @@ die() {
 trim() { awk '{$1=$1;print}'; }
 
 is_excluded_path() {
-  local rel="$1"
-  local ex
-
+  local rel="$1" ex
   for ex in "${EXCLUDE_DIRS[@]}"; do
     [[ "$rel" == "$ex/"* ]] && return 0
     [[ "$rel" == "$ex" ]] && return 0
@@ -143,12 +106,10 @@ is_excluded_path() {
   if [[ -f "$ignore_file" ]]; then
     while IFS= read -r line; do
       line="$(printf "%s" "$line" | trim)"
-      [[ -z "$line" ]] && continue
-      [[ "$line" == \#* ]] && continue
+      [[ -z "$line" || "$line" == \#* ]] && continue
       [[ "$rel" == "$line"* ]] && return 0
     done <"$ignore_file"
   fi
-
   return 1
 }
 
@@ -158,36 +119,29 @@ is_text_like() {
     local mime
     mime="$(file --mime-type -b "$f" || true)"
     case "$mime" in
-    text/*) return 0 ;;
-    application/json | application/xml) return 0 ;;
-    application/x-yaml | application/yaml) return 0 ;;
+    text/* | application/json | application/xml | application/x-yaml | application/yaml) return 0 ;;
+    *) return 1 ;;
     esac
-    return 1
   fi
   grep -Iq . "$f" 2>/dev/null
 }
 
 is_image_like() {
-  local f="$1"
-  local ext="${f##*.}"
+  local f="$1" ext="${f##*.}"
   ext="${ext,,}"
-  case "$ext" in
-  png | jpg | jpeg | webp | gif | svg) return 0 ;;
-  *) return 1 ;;
-  esac
+  case "$ext" in png | jpg | jpeg | webp | gif | svg) return 0 ;; *) return 1 ;; esac
 }
 
 collect_matches() {
   local cap="$1"
   shift
   local -a globs=("$@")
-
   (
     shopt -s nullglob globstar
     cd "$CONTEXT_DIR"
-
     local -a results=()
     local rel abs
+
     for g in "${globs[@]}"; do
       for rel in $g; do
         [[ -d "$rel" ]] && continue
@@ -211,9 +165,7 @@ collect_matches() {
 file_bytes() { wc -c <"$1" | tr -d ' '; }
 
 safe_excerpt() {
-  local f="$1"
-  local max="$2"
-  local size
+  local f="$1" max="$2" size
   size="$(file_bytes "$f")"
   if [[ "$size" -le "$max" ]]; then
     cat "$f"
@@ -225,10 +177,10 @@ safe_excerpt() {
   fi
 }
 
-llm() {
-  local prompt="$1"
+llm_print() {
+  local prompt="$1" args="$2"
   # shellcheck disable=SC2086
-  printf "%s" "$prompt" | "$LLM_CMD" -p $LLM_ARGS
+  printf "%s" "$prompt" | "$LLM_CMD" -p $args
 }
 
 # Paths
@@ -236,7 +188,6 @@ TICKET_MD="$OUT_DIR/ticket.md"
 CONTEXT_BUNDLE="$OUT_DIR/context.bundle.md"
 TICKET_ANALYSIS_MD="$OUT_DIR/ticket_analysis.md"
 DERIVED_PLAN_JSON="$OUT_DIR/derived_plan.json"
-STATE_JSON="$OUT_DIR/reverse_state.json"
 
 normalize_ticket() {
   if [[ -n "$TICKET_FILE" ]]; then
@@ -281,10 +232,7 @@ write_context_bundle() {
   {
     echo "## Docs & Config Context (excerpts)"
     echo
-    if [[ "${#doc_files[@]}" -eq 0 ]]; then
-      echo "_No doc/config files matched._"
-      echo
-    fi
+    [[ "${#doc_files[@]}" -eq 0 ]] && echo "_No doc/config files matched._" && echo
   } >>"$CONTEXT_BUNDLE"
 
   local f size
@@ -313,7 +261,7 @@ write_context_bundle() {
       echo "_No images matched._"
       echo
     else
-      echo "If you see lines like 'Analyze this image: <path>', you should open and interpret the image as context."
+      echo "If you see lines like 'Analyze this image: <path>', open and interpret it as context."
       echo
     fi
   } >>"$CONTEXT_BUNDLE"
@@ -341,13 +289,7 @@ write_context_bundle() {
     {
       echo "## Code Context (selected excerpts)"
       echo
-      if [[ "${#code_files[@]}" -eq 0 ]]; then
-        echo "_No code files matched (or all excluded)._"
-        echo
-      else
-        echo "Representative excerpts only. Prefer inspecting repo directly for complete context."
-        echo
-      fi
+      [[ "${#code_files[@]}" -eq 0 ]] && echo "_No code files matched (or all excluded)._"
       echo
     } >>"$CONTEXT_BUNDLE"
 
@@ -373,40 +315,84 @@ write_context_bundle() {
   fi
 }
 
-state_get_stage() {
-  if [[ ! -f "$STATE_JSON" ]]; then
-    echo "0"
-    return
-  fi
-  local v
-  v="$(tr -d '\n\r\t ' <"$STATE_JSON" | sed -n 's/^{"stage":\([0-9][0-9]*\)}$/\1/p')"
-  [[ -n "$v" ]] || die "reverse_state.json is invalid"
-  echo "$v"
+validate_derived_plan_json() {
+  local json="$1"
+  command -v jq >/dev/null 2>&1 || return 0
+  printf "%s" "$json" | jq -e '
+    type=="object"
+    and (.title|type=="string")
+    and (.source|type=="string")
+    and (.summary|type=="string")
+    and (.assumptions|type=="array")
+    and (.open_questions|type=="array")
+    and (.risks|type=="array")
+    and (.steps|type=="array")
+    and (.steps|length>=1)
+    and (all(.steps[]; (.id|type=="string") and (.title|type=="string") and (.details|type=="string")
+        and (.acceptance_criteria|type=="array") and (.touched_areas|type=="array")))
+  ' >/dev/null
 }
 
-state_set_stage() {
-  local s="$1"
-  cat >"$STATE_JSON" <<EOF
-{"stage":$s}
-EOF
+# If claude is run with --output-format json, it may return a wrapper. This tries to extract the assistant text.
+extract_text_from_wrapper_json() {
+  command -v jq >/dev/null 2>&1 || return 1
+  local wrapper="$1"
+  # Try a few common shapes; ignore errors.
+  printf "%s" "$wrapper" | jq -er '
+    if type=="object" then
+      (
+        .message.content? // empty
+        | (map(select(.type=="text") | .text) | join("\n"))
+      )
+      // (
+        .content? // empty
+        | (map(select(.type=="text") | .text) | join("\n"))
+      )
+      // .text?
+      // .result?.text?
+      // empty
+    else empty end
+  ' 2>/dev/null
 }
 
-regen_if_requested() {
-  if [[ "$REGEN" -eq 1 ]]; then
-    rm -f "$TICKET_ANALYSIS_MD" "$DERIVED_PLAN_JSON"
-    # Keep state but rewind to stage 0 so it re-derives everything deterministically
-    state_set_stage 0
+# Extract first JSON object/array from text (best-effort, jq required)
+extract_first_json_from_text() {
+  command -v jq >/dev/null 2>&1 || return 1
+  local text="$1"
+  # Find the first { or [ and then attempt to parse progressively.
+  # This is intentionally simple; if it fails, we just error out.
+  local start
+  start="$(printf "%s" "$text" | awk '
+    BEGIN{pos=0}
+    {
+      for(i=1;i<=length($0);i++){
+        c=substr($0,i,1)
+        if(c=="{" || c=="["){ print NR ":" i; exit }
+      }
+    }')"
+  [[ -n "$start" ]] || return 1
+
+  local line="${start%%:*}"
+  local col="${start##*:}"
+  local sliced
+  sliced="$(printf "%s" "$text" | awk -v L="$line" -v C="$col" 'NR<L{next} NR==L{print substr($0,C); next} {print}')"
+
+  # If it's valid JSON already, great.
+  if printf "%s" "$sliced" | jq -e . >/dev/null 2>&1; then
+    printf "%s" "$sliced"
+    return 0
   fi
+  return 1
 }
 
 stage0_ticket_analysis() {
-  if [[ -f "$TICKET_ANALYSIS_MD" ]]; then
+  if [[ -f "$TICKET_ANALYSIS_MD" && "$REGEN" -ne 1 ]]; then
     return
   fi
 
   echo "Generating ticket_analysis.md ..."
 
-  local prompt
+  local prompt combined out
   prompt="$(
     cat <<'EOF'
 You are operating in a STRICT "Reverse Ralph" ticket analysis phase.
@@ -442,24 +428,54 @@ Keep it concise and actionable.
 EOF
   )"
 
-  local combined="@${TICKET_MD} @${CONTEXT_BUNDLE}
+  combined="@${TICKET_MD} @${CONTEXT_BUNDLE}
 
 ${prompt}
 "
-
-  local out
-  out="$(llm "$combined")" || die "LLM failed generating ticket analysis"
+  out="$(llm_print "$combined" "$LLM_ARGS_STAGE0")" || die "LLM failed generating ticket analysis"
   printf "%s\n" "$out" >"$TICKET_ANALYSIS_MD"
 }
 
 stage1_derive_plan() {
-  if [[ -f "$DERIVED_PLAN_JSON" ]]; then
+  if [[ -f "$DERIVED_PLAN_JSON" && "$REGEN" -ne 1 ]]; then
     return
   fi
 
+  command -v jq >/dev/null 2>&1 || die "jq is required for Stage 1 (used to extract .structured_output)"
+
   echo "Generating derived_plan.json ..."
 
-  local prompt
+  local schema prompt combined wrapper plan
+
+  schema='{
+    "type":"object",
+    "required":["title","source","summary","assumptions","open_questions","risks","steps"],
+    "properties":{
+      "title":{"type":"string"},
+      "source":{"type":"string","enum":["jira","github","ticket"]},
+      "summary":{"type":"string"},
+      "assumptions":{"type":"array","items":{"type":"string"}},
+      "open_questions":{"type":"array","items":{"type":"string"}},
+      "risks":{"type":"array","items":{"type":"string"}},
+      "steps":{
+        "type":"array",
+        "minItems":5,
+        "maxItems":30,
+        "items":{
+          "type":"object",
+          "required":["id","title","details","acceptance_criteria","touched_areas"],
+          "properties":{
+            "id":{"type":"string"},
+            "title":{"type":"string"},
+            "details":{"type":"string"},
+            "acceptance_criteria":{"type":"array","items":{"type":"string"}},
+            "touched_areas":{"type":"array","items":{"type":"string"}}
+          }
+        }
+      }
+    }
+  }'
+
   prompt="$(
     cat <<'EOF'
 You are operating in a STRICT "Reverse Ralph" planning phase.
@@ -468,13 +484,13 @@ Goal:
 Derive a concrete implementation plan from the ticket and the ticket analysis.
 This plan should be suitable to feed into an execution loop (one step at a time).
 
-You will be given:
+Inputs:
 - ticket.md
 - ticket_analysis.md
 - context.bundle.md (repo excerpts + image paths)
 
 Rules:
-- Output MUST be valid JSON ONLY. No prose, no markdown fences.
+- Output MUST be valid JSON ONLY (no prose, no markdown fences).
 - Steps must be ordered for incremental progress and early validation.
 - Create 5 to 30 steps.
 - Each step should be small enough to implement in < 1 day.
@@ -482,60 +498,43 @@ Rules:
 - If unknowns remain, include early steps that resolve them (spikes, confirmations, API checks).
 - Reference repo locations realistically; do not invent structure if existing structure is implied.
 
-Schema:
-{
-  "title": string,
-  "source": "jira" | "github" | "ticket",
-  "summary": string,
-  "assumptions": string[],
-  "open_questions": string[],
-  "risks": string[],
-  "steps": [
-    {
-      "id": "S1" | "S2" | ...,
-      "title": string,
-      "details": string,
-      "acceptance_criteria": string[],
-      "touched_areas": string[]
-    }
-  ]
-}
+Return ONLY the JSON object.
 EOF
   )"
 
-  local combined="@${TICKET_MD} @${TICKET_ANALYSIS_MD} @${CONTEXT_BUNDLE}
+  combined="@${TICKET_MD} @${TICKET_ANALYSIS_MD} @${CONTEXT_BUNDLE}
 
 ${prompt}
 "
 
-  # Prefer JSON output mode if supported (harmless if ignored by CLI).
+  # Always request JSON wrapper and extract structured_output with jq (recommended by Claude Code docs).
   # shellcheck disable=SC2086
-  local out
-  out="$(printf "%s" "$combined" | "$LLM_CMD" -p $LLM_ARGS --output-format json)" ||
-    die "LLM failed deriving plan"
-  printf "%s\n" "$out" >"$DERIVED_PLAN_JSON"
-}
+  wrapper="$(
+    printf "%s" "$combined" | "$LLM_CMD" -p $LLM_ARGS_STAGE1 \
+      --output-format json \
+      --json-schema "$schema"
+  )" || die "LLM failed deriving plan"
 
-advance_once() {
-  local stage
-  stage="$(state_get_stage)"
+  # Extract the schema-validated object
+  plan="$(printf "%s" "$wrapper" | jq -c '.structured_output // empty')" || true
 
-  case "$stage" in
-  0)
-    stage0_ticket_analysis
-    state_set_stage 1
-    ;;
-  1)
-    stage1_derive_plan
-    state_set_stage 2
-    ;;
-  *)
-    echo "Reverse Ralph is complete (stage=$stage)."
-    echo "Outputs:"
-    echo "  - $TICKET_ANALYSIS_MD"
-    echo "  - $DERIVED_PLAN_JSON"
-    ;;
-  esac
+  if [[ -z "$plan" || "$plan" == "null" ]]; then
+    echo "Error: Stage 1 did not return structured_output." >&2
+    echo "This usually means your claude CLI ignored --json-schema or returned an error wrapper." >&2
+    echo "Debug: printing the top-level keys we received:" >&2
+    printf "%s" "$wrapper" | jq -r 'keys[]?' >&2 || true
+    exit 1
+  fi
+
+  # Validate (your existing validator)
+  if ! validate_derived_plan_json "$plan"; then
+    echo "Error: structured_output was present but did not match expected plan shape." >&2
+    echo "Tip: check schema/validator mismatch; dumping structured_output:" >&2
+    printf "%s\n" "$plan" | jq . >&2 || true
+    exit 1
+  fi
+
+  printf "%s\n" "$plan" | jq . >"$DERIVED_PLAN_JSON"
 }
 
 # ----------------------------
@@ -559,19 +558,11 @@ while [[ $# -gt 0 ]]; do
     CONTEXT_DIR="${2:-}"
     shift 2
     ;;
-  --iterations)
-    ITERATIONS="${2:-}"
-    shift 2
-    ;;
   --out-dir)
     OUT_DIR="${2:-}"
     shift 2
     ;;
-  --include-code)
-    INCLUDE_CODE=1
-    shift
-    ;;
-  --no-include-code)
+  --no-code)
     INCLUDE_CODE=0
     shift
     ;;
@@ -588,28 +579,20 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -d "$CONTEXT_DIR" ]] || die "--context-dir does not exist: $CONTEXT_DIR"
-[[ "$ITERATIONS" =~ ^[0-9]+$ ]] || die "--iterations must be an integer"
-
 mkdir -p "$OUT_DIR"
 
 main() {
   normalize_ticket
   write_context_bundle
-  regen_if_requested
-
-  local i=0
-  while [[ "$i" -lt "$ITERATIONS" ]]; do
-    advance_once
-    i=$((i + 1))
-  done
+  stage0_ticket_analysis
+  stage1_derive_plan
 
   echo
   echo "Artifacts:"
   echo "  - $TICKET_MD"
   echo "  - $CONTEXT_BUNDLE"
-  [[ -f "$TICKET_ANALYSIS_MD" ]] && echo "  - $TICKET_ANALYSIS_MD"
-  [[ -f "$DERIVED_PLAN_JSON" ]] && echo "  - $DERIVED_PLAN_JSON"
-  echo "  - $STATE_JSON"
+  echo "  - $TICKET_ANALYSIS_MD"
+  echo "  - $DERIVED_PLAN_JSON"
 }
 
 main
