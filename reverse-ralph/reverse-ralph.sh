@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# reverse_ralph.sh (simplified + fixed)
+# reverse_ralph.sh
 #
 # Default behavior:
 #   - Reads ticket
@@ -333,58 +333,6 @@ validate_derived_plan_json() {
   ' >/dev/null
 }
 
-# If claude is run with --output-format json, it may return a wrapper. This tries to extract the assistant text.
-extract_text_from_wrapper_json() {
-  command -v jq >/dev/null 2>&1 || return 1
-  local wrapper="$1"
-  # Try a few common shapes; ignore errors.
-  printf "%s" "$wrapper" | jq -er '
-    if type=="object" then
-      (
-        .message.content? // empty
-        | (map(select(.type=="text") | .text) | join("\n"))
-      )
-      // (
-        .content? // empty
-        | (map(select(.type=="text") | .text) | join("\n"))
-      )
-      // .text?
-      // .result?.text?
-      // empty
-    else empty end
-  ' 2>/dev/null
-}
-
-# Extract first JSON object/array from text (best-effort, jq required)
-extract_first_json_from_text() {
-  command -v jq >/dev/null 2>&1 || return 1
-  local text="$1"
-  # Find the first { or [ and then attempt to parse progressively.
-  # This is intentionally simple; if it fails, we just error out.
-  local start
-  start="$(printf "%s" "$text" | awk '
-    BEGIN{pos=0}
-    {
-      for(i=1;i<=length($0);i++){
-        c=substr($0,i,1)
-        if(c=="{" || c=="["){ print NR ":" i; exit }
-      }
-    }')"
-  [[ -n "$start" ]] || return 1
-
-  local line="${start%%:*}"
-  local col="${start##*:}"
-  local sliced
-  sliced="$(printf "%s" "$text" | awk -v L="$line" -v C="$col" 'NR<L{next} NR==L{print substr($0,C); next} {print}')"
-
-  # If it's valid JSON already, great.
-  if printf "%s" "$sliced" | jq -e . >/dev/null 2>&1; then
-    printf "%s" "$sliced"
-    return 0
-  fi
-  return 1
-}
-
 stage0_ticket_analysis() {
   if [[ -f "$TICKET_ANALYSIS_MD" && "$REGEN" -ne 1 ]]; then
     return
@@ -507,7 +455,7 @@ EOF
 ${prompt}
 "
 
-  # Always request JSON wrapper and extract structured_output with jq (recommended by Claude Code docs).
+  # Always request JSON wrapper and extract structured_output with jq
   # shellcheck disable=SC2086
   wrapper="$(
     printf "%s" "$combined" | "$LLM_CMD" -p $LLM_ARGS_STAGE1 \
@@ -526,7 +474,7 @@ ${prompt}
     exit 1
   fi
 
-  # Validate (your existing validator)
+  # Validate
   if ! validate_derived_plan_json "$plan"; then
     echo "Error: structured_output was present but did not match expected plan shape." >&2
     echo "Tip: check schema/validator mismatch; dumping structured_output:" >&2
