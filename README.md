@@ -4,6 +4,16 @@
 
 Files, utilities and best practices related to [Ralph loops](https://ghuntley.com/ralph/)
 
+## Quick Start
+
+Initialize Ralph in your project with a single command:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ralph_init.sh | bash
+```
+
+This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and set up everything you need to start using Ralph loops.
+
 ### What is Ralph?
 
 **Ralph** is a structured, file-based workflow for turning a clear plan (PRD or task list) into safe, incremental implementation using tight feedback loops with an LLM.
@@ -35,12 +45,3 @@ Ralph loops help you build it safely, one step at a time.**
 
 While a standard Ralph loop starts with a **PRD or task list** and iterates forward into implementation, Reverse Ralph starts with a **Jira ticket or GitHub issue** and works *backward* to derive a structured, implementation-ready plan.
 
-## Quick Start
-
-Initialize Ralph in your project with a single command:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ralph_init.sh | bash
-```
-
-This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and set up everything you need to start using Ralph loops.
