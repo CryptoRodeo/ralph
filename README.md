@@ -2,24 +2,19 @@
 
 <img src="./ralph.jpeg" width="450">
 
-A simple workflow for building software one step at a time with an LLM. Based on [Ralph loops](https://ghuntley.com/ralph/).
+A simple, file-based workflow for building software one step at a time with an LLM. Based on [Ralph loops](https://ghuntley.com/ralph/).
+
+Give Ralph a plan (`prd.json`), and it works through each task individually, tracking progress in `progress.txt`, and stopping between steps to keep things predictable.
 
 ## Quick Start
+
+Initialize Ralph in your project:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ralph_init.sh | bash
 ```
 
-This sets up `ralph.sh`, `progress.txt`, and `prd.json` in your project.
-
-### How it works
-
-1. Define your plan in `prd.json`
-2. The LLM picks one task, implements it, and validates it
-3. Progress is tracked in `progress.txt`
-4. Repeat until done
-
-Ralph keeps things small and focused. One task at a time, no scope creep.
+This downloads `ralph.sh`, creates `progress.txt` and `prd.json`, and sets up everything you need.
 
 ---
 
