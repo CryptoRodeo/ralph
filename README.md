@@ -16,32 +16,28 @@ This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and s
 
 ### What is Ralph?
 
-**Ralph** is a structured, file-based workflow for turning a clear plan (PRD or task list) into safe, incremental implementation using tight feedback loops with an LLM.
+**Ralph** is a simple workflow for building software with an LLM, one small step at a time.
 
-At its core, a *Ralph loop*:
+A *Ralph loop*:
 
-* Starts from a written plan (`prd.json`)
-* Works on **one small, well-defined step at a time**
-* Tracks progress explicitly (`progress.txt`)
-* Stops and re-evaluates frequently to reduce mistakes and scope creep
+* Reads a plan from `prd.json`
+* Works on **one step at a time**
+* Logs what was done in `progress.txt`
+* Stops after each step to avoid mistakes and scope creep
 
-The goal isn’t speed, it’s **clarity, control, and predictability** when using AI to write or modify code.
+The goal is **clarity and control** when using AI to write code.
 
 ---
 
 ## Reverse Ralph (Ticket-First Planning - Work In Progress)
 
-**Reverse Ralph** solves the opposite problem: unclear requirements.
+**Reverse Ralph** turns unclear tickets into clear plans.
 
-It takes a messy Jira ticket or GitHub issue and:
+Give it a Jira ticket or GitHub issue and it will:
 
-* Analyzes intent, scope, risks, and unknowns
-* Produces a clean, execution-ready plan
-* Feeds that plan directly into a normal Ralph loop
+* Identify what needs to be done, what's risky, and what's unclear
+* Produce a structured, ready-to-use plan
+* Feed that plan into a Ralph loop
 
-**Reverse Ralph helps you figure out *what* to build.
-Ralph loops help you build it safely, one step at a time.**
-**Reverse Ralph** is a complementary workflow to a traditional Ralph loop.
-
-While a standard Ralph loop starts with a **PRD or task list** and iterates forward into implementation, Reverse Ralph starts with a **Jira ticket or GitHub issue** and works *backward* to derive a structured, implementation-ready plan.
+**Reverse Ralph figures out *what* to build. Ralph builds it, one step at a time.**
 
