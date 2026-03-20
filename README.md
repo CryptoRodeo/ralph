@@ -2,7 +2,7 @@
 
 <img src="./ralph.jpeg" width="450">
 
-A simple, file-based workflow for building software one step at a time with an LLM. Based on [Ralph loops](https://ghuntley.com/ralph/).
+A simple workflow for building code with AI — one step at a time. Based on [Ralph loops](https://ghuntley.com/ralph/).
 
 ## Quick Start
 
@@ -12,30 +12,31 @@ Initialize Ralph in your project:
 curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ralph_init.sh | bash
 ```
 
-This sets up `ralph.sh`, `progress.txt`, and `prd.json` in your project.
+This downloads `ralph.sh`, creates `progress.txt` and `prd.json`, and sets up everything you need.
 
 ### How It Works
 
-Ralph turns a plan into code through small, controlled steps:
+Ralph is a way to turn a plan into working code using an LLM, one small step at a time.
 
-* Define your tasks in `prd.json`
-* Work on **one task at a time**
-* Track what’s done in `progress.txt`
-* Stop and check after each step
+A Ralph loop:
 
-The focus is on **clarity and control**, not speed.
+* Reads from a plan (`prd.json`)
+* Works on **one step at a time**
+* Tracks what's done in `progress.txt`
+* Stops after each step to keep things on track
+
+The goal is **control and predictability**, not speed.
 
 ---
 
-## Reverse Ralph (Ticket-First Planning - Work In Progress)
+## Reverse Ralph
 
-**Reverse Ralph** turns unclear tickets into clear plans.
+Reverse Ralph helps when requirements are unclear. It takes a Jira ticket or GitHub issue and turns it into a clear plan you can feed into a Ralph loop.
 
-Give it a Jira ticket or GitHub issue and it will:
+It:
 
-* Identify what needs to be done, what's risky, and what's unclear
-* Produce a structured, ready-to-use plan
-* Feed that plan into a Ralph loop
+* Breaks down what the ticket is really asking for
+* Identifies risks and unknowns
+* Produces a ready-to-use plan
 
-**Reverse Ralph figures out *what* to build. Ralph builds it, one step at a time.**
-
+**Reverse Ralph figures out *what* to build. Ralph loops build it, one step at a time.**
