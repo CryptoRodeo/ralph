@@ -1,31 +1,29 @@
-# Ralph (PRD to Implementation - Work in progress)
+# Ralph
 
 <img src="./ralph.jpeg" width="450">
 
-Files, utilities and best practices related to [Ralph loops](https://ghuntley.com/ralph/)
+A simple, file-based workflow for building software one step at a time with an LLM. Based on [Ralph loops](https://ghuntley.com/ralph/).
 
 ## Quick Start
 
-Initialize Ralph in your project with a single command:
+Initialize Ralph in your project:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ralph_init.sh | bash
 ```
 
-This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and set up everything you need to start using Ralph loops.
+This sets up `ralph.sh`, `progress.txt`, and `prd.json` in your project.
 
-### What is Ralph?
+### How It Works
 
-**Ralph** is a simple workflow for building software with an LLM, one small step at a time.
+Ralph turns a plan into code through small, controlled steps:
 
-A *Ralph loop*:
+* Define your tasks in `prd.json`
+* Work on **one task at a time**
+* Track what’s done in `progress.txt`
+* Stop and check after each step
 
-* Reads a plan from `prd.json`
-* Works on **one step at a time**
-* Logs what was done in `progress.txt`
-* Stops after each step to avoid mistakes and scope creep
-
-The goal is **clarity and control** when using AI to write code.
+The focus is on **clarity and control**, not speed.
 
 ---
 
