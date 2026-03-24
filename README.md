@@ -1,4 +1,4 @@
-# Ralph (PRD to Implementation - Work in progress)
+# Ralph (Plan to Implementation - Work in progress)
 
 <img src="./ralph.jpeg" width="450">
 
@@ -16,7 +16,7 @@ This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and s
 
 ### What is Ralph?
 
-**Ralph** is a structured, file-based workflow for turning a clear plan (PRD or task list) into safe, incremental implementation using tight feedback loops with an LLM.
+**Ralph** is a file-based workflow that helps you turn a plan into working code, one small step at a time, using an LLM. You define your tasks in a plan file (PRD), and Ralph ensures each step is implemented safely with clear progress tracking.
 
 At its core, a *Ralph loop*:
 
@@ -39,9 +39,7 @@ It takes a messy Jira ticket or GitHub issue and:
 * Produces a clean, execution-ready plan
 * Feeds that plan directly into a normal Ralph loop
 
-**Reverse Ralph helps you figure out *what* to build.
-Ralph loops help you build it safely, one step at a time.**
-**Reverse Ralph** is a complementary workflow to a traditional Ralph loop.
+**Reverse Ralph helps you figure out *what* to build. Ralph loops help you build it safely, one step at a time.**
 
-While a standard Ralph loop starts with a **PRD or task list** and iterates forward into implementation, Reverse Ralph starts with a **Jira ticket or GitHub issue** and works *backward* to derive a structured, implementation-ready plan.
+Where a Ralph loop starts from a ready-made plan and moves forward into code, Reverse Ralph starts from a ticket or issue and works backward — extracting requirements, resolving ambiguity, and producing a structured plan you can feed into a Ralph loop.
 
