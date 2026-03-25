@@ -16,16 +16,16 @@ This downloads `ralph.sh`, creates `progress.txt` and `prd.json`, and sets up ev
 
 ### What is Ralph?
 
-Ralph gives you a repeatable way to go from a plan to working code using an LLM. Instead of tackling everything at once, it breaks work into small steps and tracks each one.
+**Ralph** is a file-based workflow for turning a written plan into working code — one small step at a time.
 
-How it works:
+A *Ralph loop*:
 
-* You write a plan in `prd.json`
-* Ralph works through **one step at a time**
-* Progress is tracked in `progress.txt`
-* After each step, it stops so you can review before moving on
+* Starts from a written plan (`prd.json`)
+* Works on **one small, well-defined step at a time**
+* Tracks progress in `progress.txt`
+* Stops frequently to check for mistakes and scope creep
 
-The focus is on **staying in control** and avoiding mistakes, not going fast.
+The goal is **clarity, control, and predictability** when using an LLM to write or modify code.
 
 ---
 
