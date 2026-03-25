@@ -2,7 +2,7 @@
 
 <img src="./ralph.jpeg" width="450">
 
-Files, utilities and best practices related to [Ralph loops](https://ghuntley.com/ralph/)
+A structured workflow for implementing software projects one small step at a time using [Ralph loops](https://ghuntley.com/ralph/)
 
 ## Quick Start
 
@@ -39,9 +39,5 @@ It takes a messy Jira ticket or GitHub issue and:
 * Produces a clean, execution-ready plan
 * Feeds that plan directly into a normal Ralph loop
 
-**Reverse Ralph helps you figure out *what* to build.
-Ralph loops help you build it safely, one step at a time.**
-**Reverse Ralph** is a complementary workflow to a traditional Ralph loop.
-
-While a standard Ralph loop starts with a **PRD or task list** and iterates forward into implementation, Reverse Ralph starts with a **Jira ticket or GitHub issue** and works *backward* to derive a structured, implementation-ready plan.
+**Reverse Ralph helps you figure out *what* to build. Ralph loops help you build it safely, one step at a time.**
 
