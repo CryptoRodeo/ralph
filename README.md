@@ -25,7 +25,7 @@ At its core, a *Ralph loop*:
 * Tracks progress explicitly (`progress.txt`)
 * Stops and re-evaluates frequently to reduce mistakes and scope creep
 
-The goal isn’t speed, it’s **clarity, control, and predictability** when using AI to write or modify code.
+The goal isn't speed, it's **clarity, control, and predictability** when using AI to write or modify code.
 
 ---
 
@@ -45,3 +45,8 @@ Ralph loops help you build it safely, one step at a time.**
 
 While a standard Ralph loop starts with a **PRD or task list** and iterates forward into implementation, Reverse Ralph starts with a **Jira ticket or GitHub issue** and works *backward* to derive a structured, implementation-ready plan.
 
+---
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
