@@ -1,0 +1,37 @@
+## Feature 1 – README.md Audit (completed)
+
+Read the entire README.md and identified the following clarity/verbosity issues:
+
+**"What is Ralph?" section**
+- Opening description is verbose; "tight feedback loops with an LLM" is unexplained jargon.
+- "At its core" is filler phrasing that can be cut.
+- The closing sentence ("The goal isn't speed…") largely restates the bullet points above it.
+
+**"Reverse Ralph" section**
+- The bold summary sentence ("Reverse Ralph helps you figure out what to build…") is immediately followed by "Reverse Ralph is a complementary workflow…" — two sentences saying the same thing back-to-back.
+- The final paragraph ("While a standard Ralph loop starts with a PRD or task list…") fully duplicates information already given in the bullet list above it and can be removed.
+
+**General**
+- "PRD" and "LLM" are used without definition on first use — new users may not understand them.
+- The "(Work in progress)" tag appears in both the main title and the Reverse Ralph heading, making it ambiguous whether the whole project or only Reverse Ralph is WIP.
+
+No files were modified during this audit step (audit only).
+
+## Feature 2 – Rewrite README.md project description (completed)
+
+Rewrote the prose text in README.md for simplicity and clarity:
+
+- **"What is Ralph?" section**: Replaced verbose, jargon-heavy description with a plain one-liner. Trimmed bullet points to four concise items. Removed filler phrases ("At its core", "The goal isn't speed…" restatement).
+- **"Reverse Ralph" section**: Removed the duplicate closing paragraph that restated the bullet list. Condensed the bold summary into a single clear sentence. Kept all three bullet points, simplified wording.
+- **Quick Start section**: Left intact (already clear); no changes made.
+- All headings, links, images, and code blocks were preserved unchanged.
+
+## Feature 3 – Verify updated README.md and commit (completed)
+
+Reviewed the updated README.md from a first-time user perspective:
+
+- All factual information preserved: curl command, file names (prd.json, progress.txt), GitHub URL, image, ralph_init.sh script.
+- Quick Start section intact and unchanged.
+- Language is simpler and more concise than original: jargon removed, filler phrases cut, duplicate paragraph eliminated.
+- Committed all changes with message: "chore: verify and commit simplified README.md [SSCUI-81]"
+- Files committed: README.md, prd.json, progress.txt

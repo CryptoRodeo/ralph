@@ -1,47 +1,43 @@
-# Ralph (PRD to Implementation - Work in progress)
+# Ralph
 
 <img src="./ralph.jpeg" width="450">
 
-Files, utilities and best practices related to [Ralph loops](https://ghuntley.com/ralph/)
+A simple tool for building software with AI, one step at a time. Based on [Ralph loops](https://ghuntley.com/ralph/).
 
 ## Quick Start
 
-Initialize Ralph in your project with a single command:
+Initialize Ralph in your project:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/CryptoRodeo/ralph/refs/heads/main/ralph_init.sh | bash
 ```
 
-This will download `ralph.sh`, create `progress.txt` and `prd.json` files, and set up everything you need to start using Ralph loops.
+This downloads `ralph.sh`, creates `progress.txt` and `prd.json`, and sets up everything you need.
 
 ### What is Ralph?
 
-**Ralph** is a structured, file-based workflow for turning a clear plan (PRD or task list) into safe, incremental implementation using tight feedback loops with an LLM.
+**Ralph** helps you build software by breaking down a plan into small, manageable steps and tracking progress along the way.
 
-At its core, a *Ralph loop*:
+A *Ralph loop*:
 
-* Starts from a written plan (`prd.json`)
-* Works on **one small, well-defined step at a time**
-* Tracks progress explicitly (`progress.txt`)
-* Stops and re-evaluates frequently to reduce mistakes and scope creep
+* Starts with a written plan in `prd.json`
+* Works on **one small step at a time**
+* Records what you did in `progress.txt`
+* Pauses regularly to check your work and avoid scope creep
 
-The goal isn’t speed, it’s **clarity, control, and predictability** when using AI to write or modify code.
+This approach gives you **clarity, control, and predictability** when using AI to write or change code.
 
 ---
 
-## Reverse Ralph (Ticket-First Planning - Work In Progress)
+## Reverse Ralph
 
-**Reverse Ralph** solves the opposite problem: unclear requirements.
+**Reverse Ralph** converts a rough idea—like a Jira ticket or GitHub issue—into a clear, structured plan that's ready to build.
 
-It takes a messy Jira ticket or GitHub issue and:
+It does this by:
 
-* Analyzes intent, scope, risks, and unknowns
-* Produces a clean, execution-ready plan
-* Feeds that plan directly into a normal Ralph loop
+* Understanding what you want to accomplish
+* Breaking it into concrete steps
+* Identifying potential risks
+* Creating a plan ready for a Ralph loop to execute
 
-**Reverse Ralph helps you figure out *what* to build.
-Ralph loops help you build it safely, one step at a time.**
-**Reverse Ralph** is a complementary workflow to a traditional Ralph loop.
-
-While a standard Ralph loop starts with a **PRD or task list** and iterates forward into implementation, Reverse Ralph starts with a **Jira ticket or GitHub issue** and works *backward* to derive a structured, implementation-ready plan.
-
+**In short: Reverse Ralph plans what to build. Ralph builds it.**
