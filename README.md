@@ -16,26 +16,28 @@ This downloads `ralph.sh`, creates `progress.txt` and `prd.json`, and sets up ev
 
 ### What is Ralph?
 
-**Ralph** is a file-based workflow for turning a written plan into working code — one small step at a time.
+**Ralph** helps you build software by breaking down a plan into small, manageable steps and tracking progress along the way.
 
 A *Ralph loop*:
 
-* Starts from a written plan (`prd.json`)
-* Works on **one small, well-defined step at a time**
-* Tracks progress in `progress.txt`
-* Stops frequently to check for mistakes and scope creep
+* Starts with a written plan in `prd.json`
+* Works on **one small step at a time**
+* Records what you did in `progress.txt`
+* Pauses regularly to check your work and avoid scope creep
 
-The goal is **clarity, control, and predictability** when using an LLM to write or modify code.
+This approach gives you **clarity, control, and predictability** when using AI to write or change code.
 
 ---
 
 ## Reverse Ralph
 
-**Reverse Ralph** turns a vague ticket or issue into a clear, structured plan.
+**Reverse Ralph** converts a rough idea—like a Jira ticket or GitHub issue—into a clear, structured plan that's ready to build.
 
-It takes a Jira ticket or GitHub issue and:
+It does this by:
 
-* Breaks down the intent, scope, and risks
-* Produces a plan ready for a Ralph loop
+* Understanding what you want to accomplish
+* Breaking it into concrete steps
+* Identifying potential risks
+* Creating a plan ready for a Ralph loop to execute
 
-**Reverse Ralph figures out *what* to build. Ralph builds it.**
+**In short: Reverse Ralph plans what to build. Ralph builds it.**
